@@ -1,0 +1,14 @@
+/pocket-subtitles
+/data/
+/dist/
+.env
+*.db
+*.db-wal
+*.db-shm
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+__pycache__/
+.DS_Store
+*.log
+/tmp/

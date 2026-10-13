@@ -1,0 +1,25 @@
+services:
+  pocket-subtitles:
+    image: ghcr.io/abjelosevic88/pocket-homelab-subtitles:latest
+    container_name: pocket-subtitles
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: ${TZ:-UTC}                      # the nightly sweep runs on this clock
+      # The library folders, as mounted below. Mount them at the SAME paths
+      # Bazarr uses, or set a path mapping under Settings → Integrations.
+      MEDIA_DIRS: /media/shows,/media/movies
+      # Set both to skip the first-run setup screen and create the admin directly:
+      # ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # SECURE_COOKIES: "true"           # behind HTTPS
+      # BAZARR_URL: http://bazarr:6767   # also settable in the UI
+      # BAZARR_API_KEY: ${BAZARR_API_KEY}
+      # JELLYFIN_URL: http://jellyfin:8096
+      # JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+    volumes:
+      - ./data:/data                      # database, measurement cache, original backups
+      - /path/to/media:/media             # read-write: synced subtitles are written next to the videos
+    # Run as the user that owns your media files:
+    user: "1000:1000"
