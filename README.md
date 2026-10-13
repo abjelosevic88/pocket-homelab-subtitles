@@ -21,6 +21,8 @@ Bazarr finds subtitles. Whether they line up with *your* release is another matt
 - **Wrong subtitles are caught, not synced.** After alignment the cues must sit on detected speech; a subtitle for another episode fails that and is rejected — with Bazarr connected, that upload is blacklisted and a replacement searched for. Machine translations of fresh downloads are rejected too (tuned for Serbian, Croatian and Bosnian).
 - **You stay in control.** See every verdict with its reasons, nudge a file by ±milliseconds (it is pinned so nothing undoes your timing), restore the original download, re-sync or verify a whole season, or reset it through Bazarr.
 
+On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app for iPhone, iPad, Mac and Android: what is syncing, what needs attention, the history and every per-file action in your pocket. See [Companion app](#companion-app-pocket-homelab).
+
 <p align="center"><img src="docs/screenshots/overview.png" width="900" alt="Overview: processed, adjusted, queue, needs attention, missing downloads; now syncing with its current stage, up next, the last 14 days, recent verdicts"></p>
 
 <table>
@@ -42,10 +44,14 @@ Bazarr finds subtitles. Whether they line up with *your* release is another matt
   </tr>
 </table>
 
+<p align="center"><img src="docs/screenshots/integrations.png" width="900" alt="Settings → Integrations: Bazarr with path mapping, Jellyfin / Emby, notifications, and the post-processing command for Bazarr with a token filled in"></p>
+<p align="center"><sub>Settings → Integrations: Bazarr, Jellyfin, notifications, and the command to paste into Bazarr.</sub></p>
+
 <p align="center">
-  <img src="docs/screenshots/mobile.png" width="260" alt="Overview on a phone">&nbsp;&nbsp;
+  <img src="docs/screenshots/mobile.png" width="240" alt="Overview on a phone">&nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-nudge.png" width="240" alt="Nudge on a phone: the quick shifts, undo, unpin and the recent nudges">&nbsp;&nbsp;
   <img src="docs/screenshots/overview-dark.png" width="520" alt="Overview in dark mode"><br>
-  <sub>Installable PWA with a bottom tab bar, plus dark mode.</sub>
+  <sub>Installable PWA with a bottom tab bar (the overview, a nudge), plus dark mode.</sub>
 </p>
 
 ## Features
@@ -102,7 +108,7 @@ Runtime behaviour (reading lead, gates, schedule, integrations, notifications) i
 | `WORKERS` | `1` | Files synced in parallel. Each decodes a whole video's audio. |
 | `NICE` | `19` | CPU priority of the engine — playback and transcoding win. |
 | `JOB_TIMEOUT` | `1h` | Give up on one file after this long. |
-| `LEGACY_API` | `off` | Serve the endpoints of the old `sync-status-server` (see [docs/migrating.md](docs/migrating.md)). |
+| `LEGACY_API` | `off` | Serve the endpoints of the old `sync-status-server`: `open` without a login, `token` with one (see [docs/migrating.md](docs/migrating.md)). Pocket Homelab does not need it once it has a token. |
 | `DEMO_DATA` | `false` | Seed a sample library into an empty database. |
 
 The full list is in [docs/configuration.md](docs/configuration.md).
@@ -123,6 +129,30 @@ curl -H "Authorization: Bearer pst_…" https://subs.example.com/api/v1/widget
 
 Everything else is in [docs/api.md](docs/api.md).
 
+## Companion app: Pocket Homelab
+
+[Pocket Homelab](https://pockethomelab.com/) is a native app for iPhone, iPad, Mac and Android that talks to self-hosted services, and Pocket Subtitles is one of them. It connects with an API token and gives you:
+
+| Area | What you get |
+|---|---|
+| **Status** | What is syncing now and at which stage, the queue, and the counts: missing, need attention, synced today. A **Subtitles** tab, a Home card, and on the Mac tiles and a page of its own. |
+| **Needs attention** | Files the engine gave up on, that failed, or that turned out to be the wrong episode or a machine translation, and the **rejected downloads** with *Put back*. |
+| **A file** | The verdict and its reasons, how far it moved, the method, the pin; **Sync now**, **Verify against the audio**, **Pin** / **Unpin**, **Restore original download**, nudge by ±ms and **Undo**; its runs and changes. |
+| **History** | Every run, filtered by outcome or a search. |
+| **Queue** | What is syncing and waiting (move to the front, cancel, clear), **Run the sweep now** with what it would check, and the sweeps and season tools as they run. |
+| **Library** | Shows and movies with their counts, files by season, and the season tools: verify, sync again (with fresh audio), reset through Bazarr. |
+| **Missing** | Bazarr's missing list through this server, with **Search now** per language; no Bazarr key needed in the app. |
+| **Nudge** | Search the library, shift a file by ±100…1000 ms or any value; the app says whether Jellyfin reloaded it. |
+
+Setup:
+
+1. In Pocket Subtitles, create a token under **Settings → API tokens** (it starts with `pst_` and is shown once).
+2. In Pocket Homelab, open **Settings → Services → Subtitles** and enter the **Pocket Subtitles URL** (e.g. `https://subs.example.com`) and the **Pocket Subtitles API token**, then **Test connection**.
+3. Turn on the **Subtitles** tab in **Settings → Tabs**.
+
+Without a token the app falls back to the old `sync-status-server` endpoints, which need `LEGACY_API=open` or `token`. The token is kept in the device's secure store (the Keychain on Apple devices). Details: [pockethomelab.com/docs/services/subsync](https://pockethomelab.com/docs/services/subsync).
+
+
 ## Backups
 
 - **Database:** Settings → Backup & data → *Download database*, `docker exec pocket-subtitles pocket-subtitles backup`, or `GET /api/v1/backup` — a consistent `VACUUM INTO` copy.
@@ -141,4 +171,4 @@ make test     # go vet + go test + engine tests + tsc
 make docker   # the image, engine included
 ```
 
-Planned next steps are in [docs/roadmap.md](docs/roadmap.md). Sibling projects: Pocket Habits, Pocket Inventory, Pocket Bookshelf, Pocket Split and Pocket Invoicing.
+Planned next steps are in [docs/roadmap.md](docs/roadmap.md). Sibling projects built the same way: [Pocket Habits](https://github.com/abjelosevic88/pocket-homelab-habit-tracker), [Pocket Inventory](https://github.com/abjelosevic88/pocket-homelab-inventory), [Pocket Bookshelf](https://github.com/abjelosevic88/pocket-homelab-bookshelf), [Pocket Split](https://github.com/abjelosevic88/pocket-homelab-cost-split) and [Pocket Invoicing](https://github.com/abjelosevic88/pocket-homelab-invoicing).
