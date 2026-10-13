@@ -13,7 +13,7 @@ export function Lang({ lang, flags }: { lang: string; flags?: string }) {
 }
 
 export function Shift({ s, decision }: { s: number | null | undefined; decision?: string }) {
-  if (s === null || s === undefined || decision === 'already_in_sync') return null
+  if (s === null || s === undefined || s === 0 || decision === 'already_in_sync') return null
   return <span className="mono muted small">{fmtShift(s)}</span>
 }
 

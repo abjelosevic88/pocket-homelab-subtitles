@@ -261,7 +261,7 @@ a.fname-link:hover { text-decoration: none; } a.fname-link:hover .fname { color:
 .legend li { display: inline-flex; align-items: center; gap: 6px; }
 .legend .key { width: 10px; height: 10px; border-radius: 2px; }
 .c-adjusted { background: var(--c-adjusted); } .c-insync { background: var(--c-insync); } .c-problems { background: var(--c-problems); }
-.cols-wrap { display: grid; grid-template-columns: auto 1fr; gap: 8px; height: 190px; padding-bottom: 22px; }
+.cols-wrap { margin-top: 18px; display: grid; grid-template-columns: auto 1fr; gap: 8px; height: 190px; padding-bottom: 22px; }
 .cols-axis { display: flex; flex-direction: column; justify-content: space-between; font-size: 11px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; transform: translateY(-6px); height: calc(100% + 12px); margin-bottom: -12px; }
 .cols { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 100%; border-bottom: 1px solid var(--border); }
 .cols-grid span { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); }
