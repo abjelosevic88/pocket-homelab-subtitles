@@ -364,3 +364,13 @@ a.fname-link:hover { text-decoration: none; } a.fname-link:hover .fname { color:
 .toolbar .sel-btn { padding-top: 7px; padding-bottom: 7px; }
 @media (max-width: 900px) { .toolbar .sel { min-width: 0; flex: 1 1 45%; } }
 
+
+/* season cards line up with each other */
+.table.files { table-layout: fixed; }
+.table.files td:nth-child(1) { width: 26%; }
+.table.files td:nth-child(2) { width: 12%; }
+.table.files td:nth-child(3) { width: 34%; }
+.table.files td:nth-child(4) { width: 12%; }
+.table.files td:nth-child(5) { width: 16%; }
+.table.files td { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { .table.files td:nth-child(1) { width: 40%; } .table.files td:nth-child(2) { width: 18%; } .table.files td:nth-child(3) { width: auto; } }

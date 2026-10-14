@@ -18,7 +18,12 @@ import (
 var VideoExt = map[string]bool{".mkv": true, ".mp4": true, ".avi": true, ".m4v": true, ".mov": true, ".ts": true, ".webm": true, ".wmv": true, ".mpg": true}
 
 var (
-	episodeRE = regexp.MustCompile(`(?i)\bS(\d{1,2})[ ._-]?E(\d{1,3})`)
+	// S01E02 / s01.e02 / S01_E02, not glued to a letter or digit before it. No \b:
+	// in "Show_Name_S01E02" the underscore is a word character, so \b never fires.
+	episodeRE = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])S(\d{1,2})[ ._-]?E(\d{1,3})`)
+	// 1x02 as a fallback ("Show - 1x02 - Title"); digits on both sides must stand alone,
+	// so 1920x1080 and x265 never match.
+	crossRE   = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(\d{1,2})x(\d{2,3})(?:[^a-z0-9]|$)`)
 	movieRE   = regexp.MustCompile(`^(.*?)[. _-]+\(?((?:19|20)\d{2})\)?(?:[. _-]|$)`)
 	seasonDir = regexp.MustCompile(`(?i)^(season|staffel|saison|sezona)[ ._-]*\d+$|^s\d{1,2}$|^specials$`)
 	// Flags that may follow the language code: x.en.hi.srt, x.sr.forced.srt.
@@ -131,6 +136,18 @@ func FindVideo(subtitle string) string {
 	return ""
 }
 
+// episodeIn finds the season and episode in a file name; prefix is the text before it.
+func episodeIn(base string) (season, episode int, prefix string, ok bool) {
+	for _, re := range []*regexp.Regexp{episodeRE, crossRE} {
+		if m := re.FindStringSubmatchIndex(base); m != nil {
+			season, _ = strconv.Atoi(base[m[2]:m[3]])
+			episode, _ = strconv.Atoi(base[m[4]:m[5]])
+			return season, episode, base[:m[0]], true
+		}
+	}
+	return 0, 0, "", false
+}
+
 // Describe derives names and language for one subtitle.
 func (l *Library) Describe(subtitle, video string) store.LibraryEntry {
 	e := store.LibraryEntry{Path: subtitle, VideoPath: video, Kind: "other"}
@@ -165,13 +182,11 @@ func (l *Library) Describe(subtitle, video string) store.LibraryEntry {
 	if videoStem != "" {
 		base = videoStem
 	}
-	if m := episodeRE.FindStringSubmatchIndex(base); m != nil {
-		s, _ := strconv.Atoi(base[m[2]:m[3]])
-		ep, _ := strconv.Atoi(base[m[4]:m[5]])
+	if s, ep, prefix, ok := episodeIn(base); ok {
 		e.Kind, e.Season, e.Episode = "episode", &s, &ep
 		e.Label = "S" + pad2(s) + "E" + pad2(ep)
 		if title == "" {
-			title = cleanName(base[:m[0]])
+			title = cleanName(prefix)
 		}
 	} else if mm := movieRE.FindStringSubmatch(base); mm != nil {
 		e.Kind = "movie"
@@ -246,10 +261,8 @@ func ParseLang(name, videoStem string) (lang, flags string) {
 // Prettify turns a release file name into "Show S01E02" / "Movie (2019)".
 func Prettify(name string) string {
 	base := strings.TrimSuffix(name, filepath.Ext(name))
-	if m := episodeRE.FindStringSubmatchIndex(base); m != nil {
-		s, _ := strconv.Atoi(base[m[2]:m[3]])
-		ep, _ := strconv.Atoi(base[m[4]:m[5]])
-		return cleanName(base[:m[0]]) + " S" + pad2(s) + "E" + pad2(ep)
+	if s, ep, prefix, ok := episodeIn(base); ok {
+		return cleanName(prefix) + " S" + pad2(s) + "E" + pad2(ep)
 	}
 	if mm := movieRE.FindStringSubmatch(base); mm != nil {
 		return cleanName(mm[1]) + " (" + mm[2] + ")"

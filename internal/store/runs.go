@@ -229,7 +229,18 @@ func (s *Store) LinkRuns(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return n, err
+	}
+	// History keeps the names a file had when it ran; when the library learns a
+	// better name (a parser fix, a renamed folder), carry it over.
+	_, err = s.DB.ExecContext(ctx, `UPDATE runs SET
+		title = (SELECT title FROM subtitles s WHERE s.id = runs.subtitle_id),
+		label = (SELECT label FROM subtitles s WHERE s.id = runs.subtitle_id)
+		WHERE subtitle_id IS NOT NULL AND EXISTS (SELECT 1 FROM subtitles s WHERE s.id = runs.subtitle_id
+		  AND (s.title != runs.title OR s.label != runs.label))`)
+	return n, err
 }
 
 var _ = sql.ErrNoRows

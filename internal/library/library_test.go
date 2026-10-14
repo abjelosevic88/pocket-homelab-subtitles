@@ -59,3 +59,30 @@ func TestPrettify(t *testing.T) {
 		t.Error(got)
 	}
 }
+
+// Underscores are word characters: a \b before S01E01 never matched these.
+func TestEpisodeNames(t *testing.T) {
+	l := New([]string{"/media/tv"})
+	cases := []struct{ path, title, label string }{
+		{"/media/tv/Fear the Walking Dead/Fear_the_Walking_Dead_S01E01_x265_1080p_BluRay_30nama_30NAMA.sr.srt", "Fear the Walking Dead", "S01E01"},
+		{"/media/tv/Fear the Walking Dead/Fear.the.Walking.Dead.S07E10.1080p.en.hi.srt", "Fear the Walking Dead", "S07E10"},
+		{"/media/tv/Show/Show - 2x05 - Title.en.srt", "Show", "S02E05"},
+		{"/media/tv/Show/show_s3_e12.en.srt", "Show", "S03E12"},
+		{"/media/tv/Loose_Show_S02E03_720p.en.srt", "Loose Show", "S02E03"},
+	}
+	for _, c := range cases {
+		e := l.Describe(c.path, "")
+		if e.Kind != "episode" || e.Title != c.title || e.Label != c.label {
+			t.Errorf("%s: kind=%s title=%q label=%q", c.path, e.Kind, e.Title, e.Label)
+		}
+	}
+	// resolutions and codecs are not episodes
+	for _, p := range []string{"/media/tv/Movie/Movie.2019.1920x1080.x265.en.srt", "/media/tv/Movie/Movie_2019_x264.en.srt"} {
+		if e := l.Describe(p, ""); e.Kind == "episode" {
+			t.Errorf("%s: read as episode %s", p, e.Label)
+		}
+	}
+	if got := Prettify("Fear_the_Walking_Dead_S01E01_x265_1080p.sr.srt"); got != "Fear the Walking Dead S01E01" {
+		t.Error(got)
+	}
+}
