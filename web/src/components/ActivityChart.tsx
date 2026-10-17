@@ -44,7 +44,7 @@ export function ActivityChart({ days }: { days: DayCount[] }) {
               return (
                 <div key={d.day} className={`col ${hover === i ? 'hl' : ''}`} role="listitem" tabIndex={0} aria-label={label}
                   onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(h => h === i ? null : h)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}>
-                  <div className="stack" style={{ height: `${(total / top) * 100}%` }}>
+                  <div className="stack" style={{ height: `max(${(total / top) * 100}%, ${Math.max(0, segs.length * 4 - 2)}px)` }}>
                     {segs.slice().reverse().map((s, k) => <span key={s.key} className={`seg ${s.cls} ${k === 0 ? 'cap' : ''}`} style={{ flexGrow: s.v }} />)}
                   </div>
                   {i === peak && total > 0 && hover === null && <span className="col-val" style={{ bottom: `calc(${(total / top) * 100}% + 4px)` }}>{total}</span>}
