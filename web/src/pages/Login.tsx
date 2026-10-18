@@ -27,7 +27,7 @@ export default function Login({ mode }: { mode: 'login' | 'setup' }) {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <div className="row mb" style={{ justifyContent: 'center', gap: 10 }}><span className="logo" style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent)', color: '#fff', display: 'grid', placeItems: 'center' }}><Logo /></span><h1>{status?.title || 'Pocket Subtitles'}</h1></div>
+        <div className="row mb" style={{ justifyContent: 'center', gap: 10 }}><span className="logo" style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent)', color: '#fff', display: 'grid', placeItems: 'center' }}><img src="/favicon.svg" alt="" /></span><h1>{status?.title || 'Pocket Subtitles'}</h1></div>
         <Card title={mode === 'setup' ? 'Welcome! Create the first account' : 'Sign in'}>
           <form onSubmit={submit} className="grid" style={{ gap: 14 }}>
             {mode === 'setup' && <Field label="Your name"><input value={form.name} onChange={set('name')} autoFocus /></Field>}
