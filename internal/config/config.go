@@ -65,6 +65,12 @@ type Config struct {
 	JellyfinAPIKey  string
 	JellyfinPathMap string
 
+	// Pocket Core: when CORE_URL is set the app registers itself on start,
+	// publishes events and accepts the tokens Core hands to paired phones.
+	CoreURL             string
+	CoreRegistrationKey string
+	CoreAppURL          string // how Core reaches this app; defaults to BASE_URL
+
 	DemoData bool
 }
 
@@ -161,7 +167,14 @@ func Load() (*Config, error) {
 		JellyfinAPIKey:  envSecret("JELLYFIN_API_KEY"),
 		JellyfinPathMap: env("JELLYFIN_PATH_MAP", ""),
 
+		CoreURL:             strings.TrimRight(env("CORE_URL", ""), "/"),
+		CoreRegistrationKey: env("CORE_REGISTRATION_KEY", ""),
+		CoreAppURL:          strings.TrimRight(env("CORE_APP_URL", ""), "/"),
+
 		DemoData: envBool("DEMO_DATA", false),
+	}
+	if c.CoreAppURL == "" {
+		c.CoreAppURL = c.BaseURL
 	}
 	for _, d := range strings.Split(env("MEDIA_DIRS", "/media"), ",") {
 		if d = strings.TrimSpace(d); d != "" {

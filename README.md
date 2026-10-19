@@ -67,7 +67,7 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 | **Nudge** | Shift one file by milliseconds (quick ±100…1000 or any value), undo, unpin. Pinned so the sweep keeps your timing. Jellyfin is told immediately. |
 | **Season tools** | Verify (independent whole-file check of every file), Re-sync (optionally with fresh audio references), Reset through Bazarr (back up, delete, download again with manual provider search and a preferred provider, sync, de-duplicate, verify; anything no provider has any more is restored). |
 | **Issues** | Files that need attention, rejected downloads (put one back with a click), Bazarr's missing list with *search now*. |
-| **Integrations** | Bazarr (wanted counts, blacklist, season tools), Jellyfin/Emby folder refresh, notifications via Apprise, ntfy or a webhook. Path mappings when containers see the library differently. |
+| **Integrations** | Bazarr (wanted counts, blacklist, season tools), Jellyfin/Emby folder refresh, notifications via Apprise, ntfy or a webhook. Path mappings when containers see the library differently. With **Pocket Core** on the box: registers itself, publishes `subtitles.synced`, `subtitles.failed` and `subtitles.nudged`, accepts paired-phone tokens. |
 | **Users** | Built-in login (admin/member), or trust your SSO proxy's header, or no login on a trusted LAN. Personal API tokens. |
 | **Data** | SQLite backup from the UI/CLI/API, Prometheus `/metrics`, a Homepage-ready `/api/v1/widget`. The first original of every changed file is kept forever. |
 

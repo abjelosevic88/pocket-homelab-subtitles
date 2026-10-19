@@ -192,6 +192,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	tz, _ := time.Now().Zone()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version": Version, "go": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH,
+		"core":      s.coreStatus(),
 		"auth_mode": s.cfg.AuthMode, "legacy_api": s.cfg.LegacyAPI, "db_path": s.cfg.DBPath, "db_bytes": dbBytes,
 		"media_dirs": s.cfg.MediaDirs, "cache_dir": s.cfg.CacheDir, "cache_bytes": cache, "cache_files": cacheN,
 		"backup_dir": s.cfg.BackupDir, "backup_bytes": backups, "backup_files": backupsN, "workers": s.cfg.Workers,

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/config"
+	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/core"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/worker"
 )
@@ -40,6 +42,17 @@ type Server struct {
 
 	wantedMu sync.Mutex
 	wanted   wantedCache
+
+	core     *core.Client
+	coreMu   sync.Mutex
+	coreOK   bool
+	coreErr  string
+	resolved map[string]resolvedURL
+}
+
+type resolvedURL struct {
+	url string
+	at  time.Time
 }
 
 type wantedCache struct {
@@ -51,7 +64,14 @@ type wantedCache struct {
 
 // New creates a server.
 func New(cfg *config.Config, st *store.Store, w *worker.Worker, log *slog.Logger, webFS fs.FS) *Server {
-	return &Server{cfg: cfg, store: st, w: w, log: log, webFS: webFS, started: time.Now()}
+	s := &Server{cfg: cfg, store: st, w: w, log: log, webFS: webFS, started: time.Now(),
+		core:     core.New(cfg.CoreURL, core.Options{TokenFile: cfg.DataDir + "/core.token"}),
+		resolved: map[string]resolvedURL{}}
+	if s.core.Configured() && w != nil {
+		// every finished sync (success or failure) becomes a Core event
+		w.OnRun = s.publishRun
+	}
+	return s
 }
 
 // Bootstrap seeds the first admin, integration settings from the environment,
@@ -97,6 +117,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	}
 	_ = s.store.PurgeSessions(ctx)
 	_ = s.store.PruneJobs(ctx, store.TimeString(time.Now().AddDate(0, 0, -14)))
+	if s.core.Configured() {
+		go s.coreLoop(ctx)
+	}
 	return nil
 }
 
@@ -275,6 +298,128 @@ func userIDPtr(r *http.Request) *int64 {
 		return &id
 	}
 	return nil
+}
+
+// ---- Pocket Core ----
+
+// coreLoop registers with Core on start (retrying until it answers) and
+// re-registers every 30 minutes so version and last-seen stay fresh.
+func (s *Server) coreLoop(ctx context.Context) {
+	wait := 5 * time.Second
+	for {
+		err := s.registerWithCore(ctx)
+		s.coreMu.Lock()
+		s.coreOK, s.coreErr = err == nil, ""
+		if err != nil {
+			s.coreErr = err.Error()
+		}
+		s.coreMu.Unlock()
+		if err != nil {
+			s.log.Warn("pocket core: registration failed, retrying", "err", err, "in", wait.String())
+		} else {
+			wait = 30 * time.Minute
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		if err != nil && wait < 5*time.Minute {
+			wait *= 2
+		}
+	}
+}
+
+func (s *Server) registerWithCore(ctx context.Context) error {
+	reg, err := s.core.Register(ctx, s.cfg.CoreRegistrationKey, core.Manifest{
+		Slug: "subtitles", Name: "Pocket Subtitles",
+		Description: "Keeps your library's subtitles in sync with the audio: every download from Bazarr re-timed automatically, the library swept every night, any file nudged by hand.",
+		Icon:        "/favicon.svg", Version: Version,
+		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "SUBSYNC",
+		Publishes: []string{"subtitles.synced", "subtitles.failed", "subtitles.nudged"},
+	})
+	if err != nil {
+		return err
+	}
+	if reg.Token != "" {
+		s.log.Info("pocket core: registered, app token stored", "core", s.cfg.CoreURL)
+	} else {
+		s.log.Debug("pocket core: re-registered", "core", s.cfg.CoreURL)
+	}
+	return nil
+}
+
+// publish sends an event to Core without blocking the request.
+func (s *Server) publish(topic, subject string, payload map[string]any) {
+	if !s.core.Configured() {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.core.Publish(ctx, topic, subject, payload); err != nil {
+			s.log.Warn("pocket core: publish failed", "topic", topic, "err", err)
+		}
+	}()
+}
+
+// publishRun is the worker's OnRun hook: a sync that re-timed a file becomes
+// subtitles.synced, one that needs a person becomes subtitles.failed. Verdicts
+// that changed nothing (in sync, pinned, skipped) are not events.
+func (s *Server) publishRun(sub *store.Subtitle, run *store.Run) {
+	if sub == nil || run == nil {
+		return
+	}
+	payload := map[string]any{
+		"file_id": sub.ID, "run_id": run.ID, "title": sub.Title, "label": sub.Label, "lang": sub.Lang, "name": run.Name,
+		"source": run.Source, "decision": run.Decision, "reason": run.Reason, "method": run.Method, "shift": run.MaxShift, "at": run.CreatedAt,
+	}
+	switch {
+	case run.Decision == "synced":
+		s.publish("subtitles.synced", fmt.Sprintf("file:%d", sub.ID), payload)
+	case store.IsAttention(run.Decision):
+		s.publish("subtitles.failed", fmt.Sprintf("file:%d", sub.ID), payload)
+	}
+}
+
+// publishNudge announces a hand nudge (the file is pinned by it).
+func (s *Server) publishNudge(sub *store.Subtitle, res *worker.NudgeResult) {
+	if sub == nil || res == nil {
+		return
+	}
+	s.publish("subtitles.nudged", fmt.Sprintf("file:%d", sub.ID), map[string]any{
+		"file_id": sub.ID, "title": sub.Title, "label": sub.Label, "lang": sub.Lang, "name": filepath.Base(sub.Path),
+		"ms": res.MS, "total_ms": res.TotalMS, "cues": res.Cues, "pinned": res.Pinned,
+	})
+}
+
+// resolveSibling asks Core where a sibling app lives (cached a minute) so the
+// *_URL settings may stay empty on a box with Core.
+func (s *Server) resolveSibling(ctx context.Context, slug string) string {
+	if !s.core.Configured() {
+		return ""
+	}
+	s.coreMu.Lock()
+	if r, ok := s.resolved[slug]; ok && time.Since(r.at) < time.Minute {
+		s.coreMu.Unlock()
+		return r.url
+	}
+	s.coreMu.Unlock()
+	url := ""
+	if res, err := s.core.Resolve(ctx, slug); err == nil {
+		url = res.URL
+	}
+	s.coreMu.Lock()
+	s.resolved[slug] = resolvedURL{url: url, at: time.Now()}
+	s.coreMu.Unlock()
+	return url
+}
+
+// coreStatus summarises the Pocket Core link for the About page.
+func (s *Server) coreStatus() map[string]any {
+	s.coreMu.Lock()
+	defer s.coreMu.Unlock()
+	return map[string]any{"configured": s.core.Configured(), "url": s.cfg.CoreURL, "registered": s.coreOK, "error": s.coreErr}
 }
 
 // ---------- health / metrics ----------

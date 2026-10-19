@@ -409,6 +409,7 @@ func (s *Server) handleFileNudge(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.publishNudge(sub, res)
 	writeJSON(w, http.StatusOK, res)
 }
 

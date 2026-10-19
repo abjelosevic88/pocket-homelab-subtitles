@@ -35,6 +35,8 @@ Two layers:
 | `LEGACY_API` | `off` | `open` / `token`: serve `GET /` (JSON for non-browser clients), `GET /nudge/files`, `POST /nudge/{apply,undo,unpin}` like the old sync-status-server. |
 | `BAZARR_URL`, `BAZARR_API_KEY`, `BAZARR_PATH_MAP` | – | Seed Settings → Integrations → Bazarr. `BAZARR_API_KEY_FILE` reads a file. |
 | `JELLYFIN_URL`, `JELLYFIN_API_KEY`, `JELLYFIN_PATH_MAP` | – | Seed Settings → Integrations → Jellyfin. |
+| `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://git.bjelke.org/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the minted app token lives in `$DATA_DIR/core.token`), publish `subtitles.synced` / `subtitles.failed` / `subtitles.nudged`, and accept the tokens Core hands to paired phones |
+| `CORE_APP_URL` | `BASE_URL` | How Core reaches this app for health checks (e.g. `http://host.docker.internal:8150`) |
 | `LOG_LEVEL` / `LOG_FORMAT` | `info` / `text` | `debug` logs every request; `json` for log shippers. |
 | `DEMO_DATA` | `false` | Sample library and history in an empty database; nothing is synced. |
 

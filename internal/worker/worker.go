@@ -45,6 +45,10 @@ type Worker struct {
 	slots chan struct{} // engine slots shared by syncs and verifications
 	wake  chan struct{}
 
+	// OnRun, when set, is called after every recorded sync run (any source,
+	// any verdict) once the file's verdict is written. Must not block.
+	OnRun func(sub *store.Subtitle, run *store.Run)
+
 	mu      sync.Mutex
 	running map[int64]*active
 	tasks   map[int64]context.CancelFunc
@@ -397,6 +401,9 @@ func (w *Worker) afterRun(ctx context.Context, st store.Settings, sub *store.Sub
 		v.SubSize, v.SubMtime = sig(sub.Path)
 		v.VidSize, v.VidMtime = sig(sub.VideoPath)
 		_ = w.st.SetVerdict(ctx, sub.Path, v)
+	}
+	if w.OnRun != nil {
+		w.OnRun(sub, run)
 	}
 	if run.Source == "sweep" {
 		return // the sweep sends one summary
