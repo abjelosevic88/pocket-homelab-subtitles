@@ -3,7 +3,8 @@ module github.com/abjelosevic88/pocket-homelab-subtitles
 go 1.26.5
 
 require (
-	github.com/go-chi/chi/v5 v5.4.0
+	github.com/abjelosevic88/pocket-homelab-core v0.1.0
+	github.com/go-chi/chi/v5 v5.5.0
 	golang.org/x/crypto v0.58.0
 	modernc.org/sqlite v1.60.1
 )
