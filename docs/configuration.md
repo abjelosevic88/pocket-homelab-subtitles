@@ -29,6 +29,9 @@ Two layers:
 | `AUTH_PROXY_HEADER` / `AUTH_PROXY_EMAIL_HEADER` | `Remote-User` / `Remote-Email` | For `proxy` mode. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | – | First admin, created when there are no users yet. |
 | `SESSION_TTL` | `720h` | Login lifetime. |
+| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | – | Sign in with an OpenID Connect provider (PocketID, Authelia, Authentik, Keycloak…). Needs `BASE_URL`; the callback is `BASE_URL/api/v1/auth/oidc/callback`. On a box with Pocket Core none of these are needed — the app receives its client when it registers. |
+| `OIDC_NAME` | `single sign-on` | Button label: “Sign in with …” (“Pocket Core” when the client came from Core). |
+| `OIDC_AUTO_CREATE` | `true` | Give an unknown (verified) email a member account instead of refusing it. Always on for the Core-issued client. |
 | `SECURE_COOKIES` | `false` | Set `true` behind HTTPS. |
 | `TRUST_PROXY` | `true` | Use `X-Forwarded-For` for client addresses. |
 | `METRICS_ENABLED` | `true` | Prometheus text at `/metrics`. |

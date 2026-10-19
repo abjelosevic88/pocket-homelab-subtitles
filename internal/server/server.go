@@ -43,6 +43,9 @@ type Server struct {
 	wantedMu sync.Mutex
 	wanted   wantedCache
 
+	oidcMu sync.Mutex
+	oidc   *oidcProvider // for the issuer in use; rebuilt when it changes
+
 	core     *core.Client
 	coreMu   sync.Mutex
 	coreOK   bool
@@ -64,7 +67,7 @@ type wantedCache struct {
 
 // New creates a server.
 func New(cfg *config.Config, st *store.Store, w *worker.Worker, log *slog.Logger, webFS fs.FS) *Server {
-	s := &Server{cfg: cfg, store: st, w: w, log: log, webFS: webFS, started: time.Now(),
+	s := &Server{cfg: cfg, store: st, w: w, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
 		core:     core.New(cfg.CoreURL, core.Options{TokenFile: cfg.DataDir + "/core.token"}),
 		resolved: map[string]resolvedURL{}}
 	if s.core.Configured() && w != nil {
@@ -147,6 +150,8 @@ func (s *Server) Router() http.Handler {
 		r.Post("/auth/login", s.handleLogin)
 		r.Post("/auth/setup", s.handleSetup)
 		r.Get("/auth/status", s.handleAuthStatus)
+		r.Get("/auth/oidc/start", s.handleOIDCStart)
+		r.Get("/auth/oidc/callback", s.handleOIDCCallback)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
@@ -331,13 +336,18 @@ func (s *Server) coreLoop(ctx context.Context) {
 }
 
 func (s *Server) registerWithCore(ctx context.Context) error {
-	reg, err := s.core.Register(ctx, s.cfg.CoreRegistrationKey, core.Manifest{
+	m := core.Manifest{
 		Slug: "subtitles", Name: "Pocket Subtitles",
 		Description: "Keeps your library's subtitles in sync with the audio: every download from Bazarr re-timed automatically, the library swept every night, any file nudged by hand.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "SUBSYNC",
 		Publishes: []string{"subtitles.synced", "subtitles.failed", "subtitles.nudged"},
-	})
+	}
+	if s.cfg.BaseURL != "" {
+		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration
+		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.oidcCallbackURL()}}
+	}
+	reg, err := s.core.Register(ctx, s.cfg.CoreRegistrationKey, m)
 	if err != nil {
 		return err
 	}
