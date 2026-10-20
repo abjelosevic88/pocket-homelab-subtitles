@@ -54,7 +54,7 @@ type NudgeResult struct {
 
 func (w *Worker) refresh(ctx context.Context, path string) bool {
 	st, _ := w.st.GetSettings(ctx)
-	jf := w.jellyfinClient(st)
+	jf := w.jellyfinClient(ctx, st)
 	if jf == nil {
 		return false
 	}

@@ -67,7 +67,7 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 | **Nudge** | Shift one file by milliseconds (quick ±100…1000 or any value), undo, unpin. Pinned so the sweep keeps your timing. Jellyfin is told immediately. |
 | **Season tools** | Verify (independent whole-file check of every file), Re-sync (optionally with fresh audio references), Reset through Bazarr (back up, delete, download again with manual provider search and a preferred provider, sync, de-duplicate, verify; anything no provider has any more is restored). |
 | **Issues** | Files that need attention, rejected downloads (put one back with a click), Bazarr's missing list with *search now*. |
-| **Integrations** | Bazarr (wanted counts, blacklist, season tools), Jellyfin/Emby folder refresh, notifications via Apprise, ntfy or a webhook. Path mappings when containers see the library differently. With **Pocket Core** on the box: registers itself, publishes `subtitles.synced`, `subtitles.failed` and `subtitles.nudged`, accepts paired-phone tokens, and offers “Sign in with Pocket Core” on the login page with no configuration (any other OpenID Connect provider via `OIDC_*`). |
+| **Integrations** | Bazarr (wanted counts, blacklist, season tools), Jellyfin/Emby folder refresh, notifications via Apprise, ntfy or a webhook. Path mappings when containers see the library differently. With **Pocket Core** on the box: registers itself, publishes `subtitles.synced`, `subtitles.failed` and `subtitles.nudged`, accepts paired-phone tokens, offers “Sign in with Pocket Core” on the login page with no configuration (any other OpenID Connect provider via `OIDC_*`), and reaches Bazarr and Jellyfin through Core's service connections (Settings → Integrations: **Pocket Core | Direct | Off**, as the admin; see [docs/configuration.md](docs/configuration.md)). |
 | **Users** | Built-in login (admin/member), or trust your SSO proxy's header, or no login on a trusted LAN. Personal API tokens. |
 | **Data** | SQLite backup from the UI/CLI/API, Prometheus `/metrics`, a Homepage-ready `/api/v1/widget`. The first original of every changed file is kept forever. |
 
@@ -103,8 +103,8 @@ Runtime behaviour (reading lead, gates, schedule, integrations, notifications) i
 | `AUTH_MODE` | `local` | `local`, `proxy` (trust `Remote-User`), or `none` (trusted LAN only). |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | – | Create the first admin without the setup screen. |
 | `SECURE_COOKIES` | `false` | `true` behind HTTPS. |
-| `BAZARR_URL` / `BAZARR_API_KEY` | – | Seed the Bazarr integration (also settable in the UI). `*_FILE` variants read Docker secrets. |
-| `JELLYFIN_URL` / `JELLYFIN_API_KEY` / `JELLYFIN_PATH_MAP` | – | Seed the Jellyfin integration. |
+| `BAZARR_URL` / `BAZARR_API_KEY` | – | Seed the Bazarr integration once (also settable in the UI; not needed with Pocket Core). `*_FILE` variants read Docker secrets. |
+| `JELLYFIN_URL` / `JELLYFIN_API_KEY` / `JELLYFIN_PATH_MAP` | – | Seed the Jellyfin integration once. |
 | `WORKERS` | `1` | Files synced in parallel. Each decodes a whole video's audio. |
 | `NICE` | `19` | CPU priority of the engine — playback and transcoding win. |
 | `JOB_TIMEOUT` | `1h` | Give up on one file after this long. |

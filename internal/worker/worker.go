@@ -23,6 +23,7 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/jellyfin"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/library"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/notify"
+	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/services"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/store"
 )
 
@@ -48,6 +49,10 @@ type Worker struct {
 	// OnRun, when set, is called after every recorded sync run (any source,
 	// any verdict) once the file's verdict is written. Must not block.
 	OnRun func(sub *store.Subtitle, run *store.Run)
+
+	// Services reaches Bazarr and Jellyfin (Pocket Core, direct or off);
+	// nil = the URLs and keys under Settings only.
+	Services *services.Resolver
 
 	mu      sync.Mutex
 	running map[int64]*active
@@ -247,12 +252,17 @@ func (w *Worker) setStage(id int64, stage string) {
 	_ = w.st.SetJobStage(context.Background(), id, stage)
 }
 
-func (w *Worker) bazarrClient(st store.Settings) *bazarr.Client {
-	return bazarr.New(st.BazarrURL, st.BazarrAPIKey, st.BazarrPathMap)
+// bazarrClient is Bazarr as reached right now (nil + why not); through Pocket
+// Core it asks Core on every call.
+func (w *Worker) bazarrClient(ctx context.Context, st store.Settings) (*bazarr.Client, error) {
+	c, _, err := w.Services.Bazarr(ctx, st)
+	return c, err
 }
 
-func (w *Worker) jellyfinClient(st store.Settings) *jellyfin.Client {
-	return jellyfin.New(st.JellyfinURL, st.JellyfinAPIKey, st.JellyfinPathMap)
+// jellyfinClient is Jellyfin as reached right now (nil when not connected).
+func (w *Worker) jellyfinClient(ctx context.Context, st store.Settings) *jellyfin.Client {
+	c, _, _ := w.Services.Jellyfin(ctx, st)
+	return c
 }
 
 // BackupPath is where the first original of a library file is kept.
@@ -376,7 +386,7 @@ func (w *Worker) process(ctx context.Context, job *store.Job) {
 		removed = gone
 	}
 	if (res.Changed || res.Latinized) && !removed {
-		if jf := w.jellyfinClient(st); jf != nil {
+		if jf := w.jellyfinClient(ctx, st); jf != nil {
 			if err := jf.Refresh(ctx, job.Path); err != nil {
 				details["jellyfin"] = err.Error()
 				w.log.Warn("jellyfin refresh", "path", job.Path, "err", err)
@@ -472,7 +482,7 @@ func (w *Worker) reject(ctx context.Context, st store.Settings, sub *store.Subti
 		return out, true
 	}
 	// blacklist: ban this upload so Bazarr fetches another one
-	if bz := w.bazarrClient(st); bz != nil && extras.Valid() {
+	if bz, _ := w.bazarrClient(ctx, st); bz != nil && extras.Valid() {
 		if err := bz.Blacklist(ctx, extras, sub.Path); err != nil {
 			out.Text = "blacklist request sent (" + err.Error() + "); the replacement search may still be running"
 		} else {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { APIToken, Settings as SettingsT, User } from '../lib/types'
+import type { APIToken, ConnMode, Settings as SettingsT, User } from '../lib/types'
 import { DATE_FORMATS, TIME_FORMATS, fmtBytes, fmtDateTime, fmtTime, fmtYMD, type DateFormat, type TimeFormat } from '../lib/format'
 import { Card, Confirm, Field, Loading, Modal, PageHeader, Segmented, Tabs, useAsync, useToast } from '../components/ui'
 import { Avatar } from '../components/people'
@@ -44,7 +44,12 @@ function useSettingsForm() {
     try { const s = await api.put<SettingsT>(`${V1}/settings`, f); setSettings(s); setF(s); toast('Saved') } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) }
   }
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setF(x => x && { ...x, [k]: v })
-  return { f, set, save, busy, isAdmin: user?.role === 'admin' }
+  /** Saves a change right away (the connection switch, Disconnect). */
+  const saveNow = async (patch: Partial<Draft>, msg: string) => {
+    if (!f) return
+    try { const s = await api.put<SettingsT>(`${V1}/settings`, { ...f, ...patch }); setSettings(s); setF(s); toast(msg) } catch (e) { toast((e as Error).message, 'err') }
+  }
+  return { f, set, save, saveNow, busy, isAdmin: user?.role === 'admin' }
 }
 
 function SaveBar({ save, busy, isAdmin }: { save: () => void; busy: boolean; isAdmin: boolean }) {
@@ -128,8 +133,39 @@ function Sync() {
   )
 }
 
+const connBadge = (mode: ConnMode, via?: string) => mode === 'off' ? <span className="badge">off</span>
+  : via ? <span className="badge cat">{via === 'core' ? 'Pocket Core' : 'direct'}</span>
+  : <span className="badge warn">not connected</span>
+
+/** Pocket Core | Direct | Off for one service; the switch is saved at once. */
+function Connection({ app, mode, via, source, detail, as, core, disabled, onMode, onDisconnect, hasKey, test, direct }: {
+  app: string; mode: ConnMode; via?: string; source?: string; detail?: string; as?: string; core: boolean; disabled: boolean
+  onMode: (m: ConnMode) => void; onDisconnect: () => void; hasKey: boolean; test: React.ReactNode; direct: React.ReactNode
+}) {
+  const ok = !!via
+  const whose = source === 'personal' ? " (the admin's own key)" : source === 'box' ? " (the box's key)" : ''
+  const line = mode === 'off' ? `Off: Pocket Subtitles does not talk to ${app}.`
+    : mode === 'core' ? (ok ? `Connected through Pocket Core${whose}, as the admin ${as || ''}. ${app} is box-wide, so the app always uses that admin's ${app} access from Core; nothing to fill in.` : `Not connected: ${detail}.`)
+    : (ok ? `Direct connection with the URL and API key below.` : `Not connected: ${detail || 'add the URL and an API key'}.`)
+  return (
+    <div className="conn-block">
+      <div><Segmented size="sm" value={mode} onChange={m => !disabled && onMode(m)} options={[
+        { value: 'core', label: 'Pocket Core', title: core ? `Through Pocket Core, as the admin ${as || ''}` : 'There is no Pocket Core on this box' },
+        { value: 'direct', label: 'Direct', title: 'A URL and API key saved here' },
+        { value: 'off', label: 'Off' },
+      ]} /></div>
+      <div className={`conn-status ${mode === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{line}</div>
+      {mode === 'direct' && <>
+        {direct}
+        <div className="row">{test}{hasKey && !disabled && <button className="btn ghost sm danger-text" onClick={onDisconnect} title="Remove the saved URL and API key">Disconnect</button>}</div>
+      </>}
+      {mode === 'core' && <div className="row">{test}</div>}
+    </div>
+  )
+}
+
 function Integrations() {
-  const { f, set, save, busy, isAdmin } = useSettingsForm()
+  const { f, set, save, saveNow, busy, isAdmin } = useSettingsForm()
   const { toast } = useToast()
   const [testing, setTesting] = useState('')
   if (!f) return <Loading />
@@ -138,16 +174,25 @@ function Integrations() {
     setTesting(what)
     try { await save(); const r = await api.post<{ message: string }>(`${V1}/settings/test/${what}`); toast(r.message) } catch (e) { toast((e as Error).message, 'err') } finally { setTesting('') }
   }
+  const modeMsg = (app: string, m: ConnMode) => m === 'off' ? `${app} switched off` : m === 'core' ? `${app} through Pocket Core` : `Direct ${app} connection`
+  const core = !!f.core_configured
   return (
     <div className="two-col">
       <div className="grid" style={{ gap: 16 }}>
-        <Card title="Bazarr">
+        <Card title="Bazarr" actions={connBadge(f.bazarr_mode, f.bazarr_via)}>
           <div className="grid" style={{ gap: 14 }}>
             <p className="muted small" style={{ margin: 0 }}>Optional, but this is where the subtitles come from. Connected, the app shows what is still missing, blacklists rejected downloads so Bazarr fetches another, and can reset a whole season.</p>
-            <Field label="URL" help="As this app reaches it, e.g. http://bazarr:6767"><input value={f.bazarr_url} onChange={e => set('bazarr_url', e.target.value)} placeholder="http://bazarr:6767" disabled={d} /></Field>
-            <Field label="API key" help={f.bazarr_api_key_set ? 'A key is saved. Type to replace it.' : 'Bazarr → Settings → General → Security.'}><input type="password" autoComplete="off" value={f.bazarr_api_key ?? ''} onChange={e => set('bazarr_api_key', e.target.value)} placeholder={f.bazarr_api_key_set ? '••••••••' : ''} disabled={d} /></Field>
-            <Field label="Path mapping" help="Only if Bazarr sees the library under another path: bazarr-path=this-app-path, comma separated."><input value={f.bazarr_path_map} onChange={e => set('bazarr_path_map', e.target.value)} placeholder="/tv=/media/shows,/movies=/media/movies" disabled={d} /></Field>
-            <div className="row"><button className="btn" onClick={() => test('bazarr')} disabled={d || testing !== ''}>{testing === 'bazarr' ? 'Testing…' : 'Save & test'}</button></div>
+            <Connection app="Bazarr" mode={f.bazarr_mode} via={f.bazarr_via} source={f.bazarr_source} detail={f.bazarr_detail} as={f.services_as} core={core} disabled={d}
+              hasKey={f.bazarr_api_key_set || !!f.bazarr_url}
+              onMode={m => saveNow({ bazarr_mode: m }, modeMsg('Bazarr', m))}
+              onDisconnect={() => saveNow({ bazarr_url: '', bazarr_api_key: '' }, 'Bazarr URL and API key removed')}
+              test={<button className="btn" onClick={() => test('bazarr')} disabled={d || testing !== ''}>{testing === 'bazarr' ? 'Testing…' : f.bazarr_mode === 'direct' ? 'Save & test' : 'Test connection'}</button>}
+              direct={<>
+                <Field label="URL" help="As this app reaches it, e.g. http://bazarr:6767"><input value={f.bazarr_url} onChange={e => set('bazarr_url', e.target.value)} placeholder="http://bazarr:6767" disabled={d} /></Field>
+                <Field label="API key" help={f.bazarr_api_key_set ? 'A key is saved. Type to replace it.' : 'Bazarr → Settings → General → Security.'}><input type="password" autoComplete="off" value={f.bazarr_api_key ?? ''} onChange={e => set('bazarr_api_key', e.target.value)} placeholder={f.bazarr_api_key_set ? '••••••••' : ''} disabled={d} /></Field>
+              </>} />
+            {f.bazarr_mode !== 'off' && <Field label="Path mapping" help="Only if Bazarr sees the library under another path: bazarr-path=this-app-path, comma separated."><input value={f.bazarr_path_map} onChange={e => set('bazarr_path_map', e.target.value)} placeholder="/tv=/media/shows,/movies=/media/movies" disabled={d} /></Field>}
+            {f.bazarr_mode !== 'off' && <SaveBar save={save} busy={busy} isAdmin={isAdmin} />}
           </div>
         </Card>
         <HookCommand />
@@ -161,13 +206,20 @@ function Integrations() {
         </Card>
       </div>
       <div className="grid" style={{ gap: 16 }}>
-        <Card title="Jellyfin / Emby">
+        <Card title="Jellyfin / Emby" actions={connBadge(f.jellyfin_mode, f.jellyfin_via)}>
           <div className="grid" style={{ gap: 14 }}>
             <p className="muted small" style={{ margin: 0 }}>Optional. After a file changes, the server is told to rescan that folder — network mounts send no change events, so without it the new timing appears only after the next scheduled scan.</p>
-            <Field label="URL"><input value={f.jellyfin_url} onChange={e => set('jellyfin_url', e.target.value)} placeholder="http://jellyfin:8096" disabled={d} /></Field>
-            <Field label="API key" help={f.jellyfin_api_key_set ? 'A key is saved. Type to replace it.' : 'Dashboard → API keys.'}><input type="password" autoComplete="off" value={f.jellyfin_api_key ?? ''} onChange={e => set('jellyfin_api_key', e.target.value)} placeholder={f.jellyfin_api_key_set ? '••••••••' : ''} disabled={d} /></Field>
-            <Field label="Path mapping" help="If Jellyfin sees the library elsewhere: this-app-path=jellyfin-path."><input value={f.jellyfin_path_map} onChange={e => set('jellyfin_path_map', e.target.value)} placeholder="/media=/data/media" disabled={d} /></Field>
-            <div className="row"><button className="btn" onClick={() => test('jellyfin')} disabled={d || testing !== ''}>{testing === 'jellyfin' ? 'Testing…' : 'Save & test'}</button></div>
+            <Connection app="Jellyfin" mode={f.jellyfin_mode} via={f.jellyfin_via} source={f.jellyfin_source} detail={f.jellyfin_detail} as={f.services_as} core={core} disabled={d}
+              hasKey={f.jellyfin_api_key_set || !!f.jellyfin_url}
+              onMode={m => saveNow({ jellyfin_mode: m }, modeMsg('Jellyfin', m))}
+              onDisconnect={() => saveNow({ jellyfin_url: '', jellyfin_api_key: '' }, 'Jellyfin URL and API key removed')}
+              test={<button className="btn" onClick={() => test('jellyfin')} disabled={d || testing !== ''}>{testing === 'jellyfin' ? 'Testing…' : f.jellyfin_mode === 'direct' ? 'Save & test' : 'Test connection'}</button>}
+              direct={<>
+                <Field label="URL"><input value={f.jellyfin_url} onChange={e => set('jellyfin_url', e.target.value)} placeholder="http://jellyfin:8096" disabled={d} /></Field>
+                <Field label="API key" help={f.jellyfin_api_key_set ? 'A key is saved. Type to replace it.' : 'Dashboard → API keys.'}><input type="password" autoComplete="off" value={f.jellyfin_api_key ?? ''} onChange={e => set('jellyfin_api_key', e.target.value)} placeholder={f.jellyfin_api_key_set ? '••••••••' : ''} disabled={d} /></Field>
+              </>} />
+            {f.jellyfin_mode !== 'off' && <Field label="Path mapping" help="If Jellyfin sees the library elsewhere: this-app-path=jellyfin-path."><input value={f.jellyfin_path_map} onChange={e => set('jellyfin_path_map', e.target.value)} placeholder="/media=/data/media" disabled={d} /></Field>}
+            {f.jellyfin_mode !== 'off' && <SaveBar save={save} busy={busy} isAdmin={isAdmin} />}
           </div>
         </Card>
         <Card title="Notifications">

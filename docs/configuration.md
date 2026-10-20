@@ -3,7 +3,7 @@
 Two layers:
 
 - **Settings in the UI** (stored in the database): sync behaviour, quality gates, the nightly sweep, integrations, notifications, season tools. Admins edit them under Settings.
-- **Environment variables**: where things live, how people sign in, how hard the engine may work. Integration variables only *seed* the matching settings on first start; what is saved in the UI wins afterwards.
+- **Environment variables**: where things live, how people sign in, how hard the engine may work. Integration variables *seed* the matching settings once (empty fields only, on the first start of this version); what is saved in the UI wins afterwards, and a Disconnect stays cleared across restarts.
 
 ## Environment
 
@@ -36,8 +36,8 @@ Two layers:
 | `TRUST_PROXY` | `true` | Use `X-Forwarded-For` for client addresses. |
 | `METRICS_ENABLED` | `true` | Prometheus text at `/metrics`. |
 | `LEGACY_API` | `off` | `open` / `token`: serve `GET /` (JSON for non-browser clients), `GET /nudge/files`, `POST /nudge/{apply,undo,unpin}` like the old sync-status-server. |
-| `BAZARR_URL`, `BAZARR_API_KEY`, `BAZARR_PATH_MAP` | – | Seed Settings → Integrations → Bazarr. `BAZARR_API_KEY_FILE` reads a file. |
-| `JELLYFIN_URL`, `JELLYFIN_API_KEY`, `JELLYFIN_PATH_MAP` | – | Seed Settings → Integrations → Jellyfin. |
+| `BAZARR_URL`, `BAZARR_API_KEY`, `BAZARR_PATH_MAP` | – | Seed Settings → Integrations → Bazarr (Direct), once. `BAZARR_API_KEY_FILE` reads a file. Not needed on a box with Pocket Core (see below). |
+| `JELLYFIN_URL`, `JELLYFIN_API_KEY`, `JELLYFIN_PATH_MAP` | – | Seed Settings → Integrations → Jellyfin (Direct), once. Not needed on a box with Pocket Core. |
 | `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://git.bjelke.org/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the minted app token lives in `$DATA_DIR/core.token`), publish `subtitles.synced` / `subtitles.failed` / `subtitles.nudged`, and accept the tokens Core hands to paired phones |
 | `CORE_APP_URL` | `BASE_URL` | How Core reaches this app for health checks (e.g. `http://host.docker.internal:8150`) |
 | `LOG_LEVEL` / `LOG_FORMAT` | `info` / `text` | `debug` logs every request; `json` for log shippers. |
@@ -61,9 +61,23 @@ Two layers:
 
 **Sync → Nightly sweep**: on/off, start time, time budget, *re-check verdicts older than* (after an engine change), managed languages, auto-unpin on a new download, verification tolerance.
 
-**Integrations**: Bazarr (URL, key, path mapping), Jellyfin (URL, key, path mapping), notifications (Apprise API URL, ntfy topic URL, or a webhook receiving `{title, body, level, app}`), season tools (languages, manual-search languages, preferred provider).
+**Integrations**: Bazarr and Jellyfin, each with a **Pocket Core | Direct | Off** switch (saved at once) and a path mapping; notifications (Apprise API URL, ntfy topic URL, or a webhook receiving `{title, body, level, app}`), season tools (languages, manual-search languages, preferred provider).
 
 ## Path mappings
 
 - **Bazarr → app**: `bazarr-prefix=app-prefix`, e.g. `/tv=/media/shows,/movies=/media/movies`. Used for paths in the hook and the season tools. Simplest is to mount the library at the same path in both containers and leave it empty.
 - **App → Jellyfin**: `app-prefix=jellyfin-prefix`, e.g. `/media=/data/media`, when Jellyfin sees the library elsewhere.
+
+## Bazarr and Jellyfin through Pocket Core
+
+Both are box-wide: the app syncs subtitles for the whole library, not for one person. Each has three modes under Settings → Integrations:
+
+| Mode | How it is reached |
+|---|---|
+| **Pocket Core** | Pocket Core's service connection (`services: bazarr, jellyfin` in the manifest): Core hands out the service's address and key on **every use** (`POST /api/v1/services/credential`), so switching it off in Core applies at once and nothing is kept here. The app acts as **the admin** (`ADMIN_EMAIL` when that account exists, else the first admin), so Core gives that admin's own key there or, failing that, the box's key (Core's rule for admins). Links (Issues → *Open Bazarr*) use Core's public URL. |
+| **Direct** | The URL and API key saved here (how it always worked). **Disconnect** removes both. |
+| **Off** | No calls at all: no missing counts, no blacklisting, no season reset, no Jellyfin refresh. |
+
+With no mode stored: Direct when a key is saved (an existing setup keeps working), else Pocket Core when `CORE_URL` is set, else Direct. The card shows *Connected through Pocket Core (the admin's own key / the box's key), as the admin …*, a direct connection, or *Not connected:* with Core's reason (switched off for the box or by the admin, no key there, no such service in Core…). The status asks Core only for the link state (`GET /api/v1/links/status`), never the key. Path mappings apply in every mode.
+
+`GET /api/v1/settings` carries `bazarr_mode` / `jellyfin_mode` (in effect; a PUT stores them), `*_via` (`core` | `direct` | empty), `*_source` (`personal` | `box`, from the last use), `*_detail` and `services_as`. `POST /api/v1/settings/test/{bazarr,jellyfin}` follows the mode.

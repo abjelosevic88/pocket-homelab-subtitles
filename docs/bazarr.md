@@ -23,7 +23,7 @@ The hook sends Bazarr's paths. If both containers mount the library at the same 
 
 ## API key
 
-Settings → Integrations → Bazarr URL + API key enables:
+Settings → Integrations → Bazarr connected — through Pocket Core (nothing to paste; see configuration.md) or Direct with a URL + API key — enables:
 
 - the *Missing downloads* tile and Issues → Missing subtitles (with *search now* per language),
 - blacklisting rejected downloads,

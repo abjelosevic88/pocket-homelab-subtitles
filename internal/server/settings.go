@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,9 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/bazarr"
-	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/jellyfin"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/notify"
+	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/services"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/store"
 )
 
@@ -24,7 +24,29 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "settings")
 		return
 	}
-	writeJSON(w, http.StatusOK, st)
+	writeJSON(w, http.StatusOK, s.publicSettings(r.Context(), st))
+}
+
+// publicSettings are the settings plus how Bazarr and Jellyfin are reached:
+// *_mode (in effect), *_via (core | direct | "" = not connected), *_source
+// (whose key Core handed out last: personal | box), *_detail (why not) and
+// services_as (the admin the app acts as through Pocket Core).
+func (s *Server) publicSettings(ctx context.Context, st store.Settings) map[string]any {
+	b, _ := json.Marshal(st)
+	var m map[string]any
+	_ = json.Unmarshal(b, &m)
+	for _, typ := range []string{services.Bazarr, services.Jellyfin} {
+		cs := s.svc.StatusOf(ctx, st, typ)
+		m[typ+"_mode"], m[typ+"_via"], m[typ+"_source"], m[typ+"_detail"] = cs.Mode, cs.Via, cs.Source, cs.Detail
+		if cs.As != "" {
+			m["services_as"] = cs.As
+		}
+	}
+	if _, ok := m["services_as"]; !ok {
+		m["services_as"] = s.ownerEmail(ctx)
+	}
+	m["core_configured"] = s.core.Configured()
+	return m
 }
 
 func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +83,12 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		in.JellyfinAPIKey = strings.TrimSpace(*keys.JellyfinAPIKey)
 	}
 	in.SetupComplete, in.LastSweepAt = cur.SetupComplete, cur.LastSweepAt
+	if !services.ValidMode(in.BazarrMode) {
+		in.BazarrMode = cur.BazarrMode
+	}
+	if !services.ValidMode(in.JellyfinMode) {
+		in.JellyfinMode = cur.JellyfinMode
+	}
 	in.Title = strings.TrimSpace(in.Title)
 	if in.Title == "" {
 		in.Title = store.DefaultTitle
@@ -99,7 +127,21 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	s.wanted.at = time.Time{}
 	s.wantedMu.Unlock()
 	st, _ := s.store.GetSettings(r.Context())
-	writeJSON(w, http.StatusOK, st)
+	writeJSON(w, http.StatusOK, s.publicSettings(r.Context(), st))
+}
+
+// viaText says how a test reached the service.
+func viaText(c *services.Conn) string {
+	if c.Via != services.ModeCore {
+		return ""
+	}
+	switch c.Source {
+	case "personal":
+		return " through Pocket Core (the admin's own key)"
+	case "box":
+		return " through Pocket Core (the box's key)"
+	}
+	return " through Pocket Core"
 }
 
 func validDate(v string) bool {
@@ -113,9 +155,10 @@ func (s *Server) handleTestIntegration(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	switch chi.URLParam(r, "what") {
 	case "bazarr":
-		c := bazarr.New(st.BazarrURL, st.BazarrAPIKey, st.BazarrPathMap)
-		if c == nil {
-			writeErr(w, http.StatusBadRequest, "set the Bazarr URL and API key first")
+		// the saved mode decides: Pocket Core, the URL and key here, or off
+		c, conn, err := s.svc.Bazarr(ctx, st)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		v, err := c.Status(ctx)
@@ -124,15 +167,15 @@ func (s *Server) handleTestIntegration(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, e, m, err := c.Wanted(ctx, 1)
-		msg := "Connected to Bazarr " + v
+		msg := "Connected to Bazarr " + v + viaText(conn)
 		if err == nil {
 			msg += fmt.Sprintf(" — %d episodes and %d movies are missing subtitles", e, m)
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"message": msg})
+		writeJSON(w, http.StatusOK, map[string]string{"message": msg, "via": conn.Via, "source": conn.Source})
 	case "jellyfin":
-		c := jellyfin.New(st.JellyfinURL, st.JellyfinAPIKey, st.JellyfinPathMap)
-		if c == nil {
-			writeErr(w, http.StatusBadRequest, "set the Jellyfin URL and API key first")
+		c, conn, err := s.svc.Jellyfin(ctx, st)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		v, err := c.Info(ctx)
@@ -140,7 +183,7 @@ func (s *Server) handleTestIntegration(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"message": "Connected to " + v})
+		writeJSON(w, http.StatusOK, map[string]string{"message": "Connected to " + v + viaText(conn), "via": conn.Via, "source": conn.Source})
 	case "notify":
 		if st.NotifyKind == "" || st.NotifyURL == "" {
 			writeErr(w, http.StatusBadRequest, "pick a notification type and URL first")

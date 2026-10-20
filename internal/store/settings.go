@@ -36,7 +36,11 @@ type Settings struct {
 	ReverifyFrom  string `json:"reverify_before"` // verdicts older than this date are re-checked
 	LastSweepAt   string `json:"last_sweep_at"`
 
-	// Integrations.
+	// Integrations. *_mode: core (through Pocket Core) | direct (the URL and
+	// key here) | off; empty = direct with a saved key, else core when the box
+	// has a Pocket Core (see internal/services).
+	BazarrMode       string `json:"bazarr_mode"`
+	JellyfinMode     string `json:"jellyfin_mode"`
 	BazarrURL        string `json:"bazarr_url"`
 	BazarrAPIKey     string `json:"-"`
 	BazarrKeySet     bool   `json:"bazarr_api_key_set"`
@@ -158,6 +162,10 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 			st.ReverifyFrom = v
 		case "last_sweep_at":
 			st.LastSweepAt = v
+		case "bazarr_mode":
+			st.BazarrMode = v
+		case "jellyfin_mode":
+			st.JellyfinMode = v
 		case "bazarr_url":
 			st.BazarrURL = v
 		case "bazarr_api_key":
@@ -206,6 +214,7 @@ func (s *Store) SaveSettings(ctx context.Context, st Settings) error {
 		"languages": NormLangs(st.Languages), "auto_unpin_new": b[st.AutoUnpinNew],
 		"sweep_enabled": b[st.SweepEnabled], "sweep_time": st.SweepTime, "sweep_budget": strconv.Itoa(st.SweepBudget),
 		"reverify_before": st.ReverifyFrom, "last_sweep_at": st.LastSweepAt,
+		"bazarr_mode": st.BazarrMode, "jellyfin_mode": st.JellyfinMode,
 		"bazarr_url": strings.TrimRight(st.BazarrURL, "/"), "bazarr_api_key": st.BazarrAPIKey, "bazarr_path_map": st.BazarrPathMap,
 		"jellyfin_url": strings.TrimRight(st.JellyfinURL, "/"), "jellyfin_api_key": st.JellyfinAPIKey, "jellyfin_path_map": st.JellyfinPathMap,
 		"notify_kind": st.NotifyKind, "notify_url": st.NotifyURL,
@@ -224,6 +233,13 @@ func (s *Store) SaveSettings(ctx context.Context, st Settings) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// GetSetting reads one key ("" when unset).
+func (s *Store) GetSetting(ctx context.Context, key string) string {
+	var v string
+	_ = s.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	return v
 }
 
 // SetSetting writes one key (used for bookkeeping such as last_sweep_at).

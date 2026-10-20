@@ -22,6 +22,7 @@ import (
 
 	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/config"
+	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/services"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/worker"
 )
@@ -47,6 +48,7 @@ type Server struct {
 	oidc   *oidcProvider // for the issuer in use; rebuilt when it changes
 
 	core     *core.Client
+	svc      *services.Resolver // Bazarr and Jellyfin: Pocket Core, direct or off
 	coreMu   sync.Mutex
 	coreOK   bool
 	coreErr  string
@@ -70,6 +72,10 @@ func New(cfg *config.Config, st *store.Store, w *worker.Worker, log *slog.Logger
 	s := &Server{cfg: cfg, store: st, w: w, log: log, webFS: webFS, started: time.Now(), oidc: &oidcProvider{},
 		core:     core.New(cfg.CoreURL, core.Options{TokenFile: cfg.DataDir + "/core.token"}),
 		resolved: map[string]resolvedURL{}}
+	s.svc = &services.Resolver{Core: s.core, Owner: s.ownerEmail}
+	if w != nil {
+		w.Services = s.svc
+	}
 	if s.core.Configured() && w != nil {
 		// every finished sync (success or failure) becomes a Core event
 		w.OnRun = s.publishRun
@@ -97,10 +103,12 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		st.SetupComplete = true
 		s.log.Info("admin user created from environment", "email", u.Email)
 	}
-	// Integration settings from the environment fill empty fields only, so
-	// what is saved under Settings always wins.
+	// Integration settings from the environment fill empty fields once: what
+	// is saved under Settings always wins, and a Disconnect stays cleared on
+	// the next start.
+	seeded := s.store.GetSetting(ctx, "integrations_seeded") != ""
 	seed := func(dst *string, v string) {
-		if *dst == "" && v != "" {
+		if !seeded && *dst == "" && v != "" {
 			*dst = v
 		}
 	}
@@ -113,6 +121,11 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if err := s.store.SaveSettings(ctx, st); err != nil {
 		return err
 	}
+	if !seeded {
+		if err := s.store.SetSetting(ctx, "integrations_seeded", store.TimeString(time.Now())); err != nil {
+			return err
+		}
+	}
 	if s.cfg.DemoData {
 		if err := s.seedDemo(ctx); err != nil {
 			return err
@@ -124,6 +137,24 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		go s.coreLoop(ctx)
 	}
 	return nil
+}
+
+// ownerEmail is the admin the app acts as through Pocket Core for the
+// box-wide Bazarr and Jellyfin: ADMIN_EMAIL when that account exists, else the
+// first admin.
+func (s *Server) ownerEmail(ctx context.Context) string {
+	if s.cfg.AdminEmail != "" {
+		if u, err := s.store.GetUserByEmail(ctx, s.cfg.AdminEmail); err == nil && u.Role == "admin" {
+			return u.Email
+		}
+	}
+	users, _ := s.store.ListUsers(ctx)
+	for _, u := range users {
+		if u.Role == "admin" {
+			return u.Email
+		}
+	}
+	return ""
 }
 
 // Router builds the chi router.
@@ -342,6 +373,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "SUBSYNC",
 		Publishes: []string{"subtitles.synced", "subtitles.failed", "subtitles.nudged"},
+		Services:  services.Uses,
 	}
 	if s.cfg.BaseURL != "" {
 		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration

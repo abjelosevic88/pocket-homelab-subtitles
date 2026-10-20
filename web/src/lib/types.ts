@@ -47,6 +47,7 @@ export interface Overview {
 export interface FileDetail extends Subtitle { runs: Run[]; events: FileEvent[]; has_original: boolean; can_undo: boolean; queued: Job | null; exists: boolean }
 export interface FileEvent { id: number; path: string; kind: string; detail: string; user_id: number | null; created_at: string }
 
+export type ConnMode = 'core' | 'direct' | 'off'
 export interface Settings {
   title: string; date_format: string; time_format: string; setup_complete: boolean
   lead_ms: number; centre_ref: boolean; polish: boolean; ref_residual: boolean; content_gate: boolean
@@ -54,6 +55,9 @@ export interface Settings {
   sweep_enabled: boolean; sweep_time: string; sweep_budget: number; reverify_before: string; last_sweep_at: string
   bazarr_url: string; bazarr_api_key_set: boolean; bazarr_path_map: string
   jellyfin_url: string; jellyfin_api_key_set: boolean; jellyfin_path_map: string
+  bazarr_mode: ConnMode; bazarr_via?: string; bazarr_source?: string; bazarr_detail?: string
+  jellyfin_mode: ConnMode; jellyfin_via?: string; jellyfin_source?: string; jellyfin_detail?: string
+  services_as?: string; core_configured?: boolean
   notify_kind: '' | 'apprise' | 'ntfy' | 'webhook'; notify_url: string; notify_failures: boolean; notify_synced: boolean; notify_sweep: boolean
   season_langs: string; season_manual_langs: string; prefer_provider: string
 }

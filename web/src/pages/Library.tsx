@@ -77,7 +77,7 @@ export function TitlePage() {
           actions={isShow && season > 0 && <>
             <button className="btn ghost sm" onClick={() => setTool({ season, mode: 'verify' })}>Verify</button>
             <button className="btn ghost sm" onClick={() => setTool({ season, mode: 'resync' })}>Re-sync</button>
-            {user?.role === 'admin' && settings?.bazarr_api_key_set && <button className="btn ghost sm" onClick={() => setTool({ season, mode: 'reset' })}>Reset…</button>}
+            {user?.role === 'admin' && !!settings?.bazarr_via && <button className="btn ghost sm" onClick={() => setTool({ season, mode: 'reset' })}>Reset…</button>}
           </>}>
           <table className="table files">
             <tbody>

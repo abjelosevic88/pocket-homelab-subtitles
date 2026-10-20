@@ -38,8 +38,8 @@ func (w *Worker) StartSeason(ctx context.Context, r SeasonRequest, userID *int64
 	}
 	if r.Mode == "reset" {
 		st, _ := w.st.GetSettings(ctx)
-		if w.bazarrClient(st) == nil {
-			return nil, bazarr.ErrNotConfigured
+		if _, err := w.bazarrClient(ctx, st); err != nil {
+			return nil, err
 		}
 	}
 	if !w.seasonMu.TryLock() {
@@ -317,9 +317,9 @@ func firstN(s []string, n int) []string {
 func (w *Worker) seasonReset(ctx context.Context, task *store.Task, r SeasonRequest) (map[string]any, error) {
 	logf := func(f string, a ...any) { w.st.TaskLog(context.Background(), task.ID, f, a...) }
 	st, _ := w.st.GetSettings(ctx)
-	bz := w.bazarrClient(st)
-	if bz == nil {
-		return nil, bazarr.ErrNotConfigured
+	bz, err := w.bazarrClient(ctx, st)
+	if err != nil {
+		return nil, err
 	}
 	if r.Season <= 0 {
 		return nil, errors.New("pick a season")

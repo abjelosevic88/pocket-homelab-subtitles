@@ -23,14 +23,14 @@ func (s *Server) missingDownloads(ctx context.Context) (episodes, movies int, ok
 	if time.Since(s.wanted.at) < time.Minute {
 		return s.wanted.episodes, s.wanted.movies, s.wanted.ok
 	}
+	cctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
 	st, _ := s.store.GetSettings(ctx)
-	c := bazarr.New(st.BazarrURL, st.BazarrAPIKey, st.BazarrPathMap)
+	c, _, _ := s.svc.Bazarr(cctx, st)
 	s.wanted = wantedCache{at: time.Now()}
 	if c == nil {
 		return 0, 0, false
 	}
-	cctx, cancel := context.WithTimeout(ctx, 6*time.Second)
-	defer cancel()
 	if _, e, m, err := c.Wanted(cctx, 1); err == nil {
 		s.wanted.episodes, s.wanted.movies, s.wanted.ok = e, m, true
 	}
@@ -649,9 +649,13 @@ func (s *Server) handleSeason(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMissing(w http.ResponseWriter, r *http.Request) {
 	st, _ := s.store.GetSettings(r.Context())
-	c := bazarr.New(st.BazarrURL, st.BazarrAPIKey, st.BazarrPathMap)
+	c, conn, err := s.svc.Bazarr(r.Context(), st)
 	if c == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"configured": false, "items": []any{}})
+		msg := ""
+		if err != nil {
+			msg = err.Error()
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"configured": false, "items": []any{}, "error": msg})
 		return
 	}
 	n := queryInt(r, "limit")
@@ -666,7 +670,7 @@ func (s *Server) handleMissing(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []bazarr.WantedItem{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"configured": true, "items": items, "episodes": e, "movies": m, "bazarr_url": st.BazarrURL})
+	writeJSON(w, http.StatusOK, map[string]any{"configured": true, "items": items, "episodes": e, "movies": m, "bazarr_url": conn.PublicURL})
 }
 
 func (s *Server) handleMissingSearch(w http.ResponseWriter, r *http.Request) {
@@ -682,12 +686,14 @@ func (s *Server) handleMissingSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	st, _ := s.store.GetSettings(r.Context())
-	c := bazarr.New(st.BazarrURL, st.BazarrAPIKey, st.BazarrPathMap)
+	c, _, err := s.svc.Bazarr(r.Context(), st)
 	if c == nil {
-		writeErr(w, http.StatusBadRequest, bazarr.ErrNotConfigured.Error())
+		if err == nil {
+			err = bazarr.ErrNotConfigured
+		}
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var err error
 	if in.Kind == "movie" {
 		err = c.SearchMovie(r.Context(), in.MovieID, in.Language)
 	} else {
