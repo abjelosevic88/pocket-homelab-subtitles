@@ -111,11 +111,6 @@ func (s *Server) handleLegacyNudge(w http.ResponseWriter, r *http.Request) {
 			fail(err)
 			return
 		}
-		if s.core.Configured() {
-			if sub, err := s.w.Resolve(ctx, in.Path); err == nil {
-				s.publishNudge(sub, res)
-			}
-		}
 		msg := "shifted " + strconv.Itoa(res.Cues) + " cues by " + signed(res.MS) + " ms (net " + signed(res.TotalMS) + " ms), pinned"
 		if !res.Jellyfin {
 			msg += "; Jellyfin not refreshed"

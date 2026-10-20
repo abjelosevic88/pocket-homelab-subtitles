@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,14 +106,25 @@ func (w *Worker) Nudge(ctx context.Context, path string, ms int, userID *int64) 
 	if err := writeAtomic(sub.Path, shifted); err != nil {
 		return nil, err
 	}
-	note := fmt.Sprintf("nudged %+d ms", ms)
-	if !sub.Pinned {
-		_ = w.st.SetPinned(ctx, sub.Path, true, note)
+	result := &NudgeResult{Cues: n, MS: ms, TotalMS: sub.NudgeMS + ms, Pinned: true}
+	err = w.st.CreateNudge(ctx, &store.Nudge{Path: sub.Path, MS: ms, Backup: bak, Cues: n, UserID: userID}, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE subtitles SET pinned=1,pinned_at=COALESCE(pinned_at,?),pin_note=CASE WHEN pinned=0 THEN ? ELSE pin_note END,nudge_ms=nudge_ms+? WHERE path=?`, store.Now(), fmt.Sprintf("nudged %+d ms", ms), ms, sub.Path); err != nil {
+			return err
+		}
+		if w.OnNudge != nil {
+			return w.OnNudge(ctx, tx, sub, result)
+		}
+		return nil
+	})
+	if err != nil {
+		if restoreErr := writeAtomic(sub.Path, data); restoreErr != nil {
+			return nil, fmt.Errorf("record nudge: %v; restore original: %w", err, restoreErr)
+		}
+		return nil, err
 	}
-	_ = w.st.CreateNudge(ctx, &store.Nudge{Path: sub.Path, MS: ms, Backup: bak, Cues: n, UserID: userID})
-	_ = w.st.AddNudgeMS(ctx, sub.Path, ms)
 	w.st.AddEvent(ctx, sub.Path, "nudge", fmt.Sprintf("%+d ms, %d cues", ms, n), userID)
-	return &NudgeResult{Cues: n, MS: ms, TotalMS: sub.NudgeMS + ms, Pinned: true, Jellyfin: w.refresh(ctx, sub.Path)}, nil
+	result.Jellyfin = w.refresh(ctx, sub.Path)
+	return result, nil
 }
 
 // UndoResult reports an undone nudge.

@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -79,7 +80,8 @@ func New(cfg *config.Config, st *store.Store, w *worker.Worker, log *slog.Logger
 	}
 	if s.core.Configured() && w != nil {
 		// every finished sync (success or failure) becomes a Core event
-		w.OnRun = s.publishRun
+		w.OnRun = s.queueRun
+		w.OnNudge = s.queueNudge
 	}
 	return s
 }
@@ -417,45 +419,24 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 }
 
 // publish persists an event locally; the SDK retries network delivery.
-func (s *Server) publish(topic, subject string, payload map[string]any) {
-	if !s.core.Configured() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := s.core.Publish(ctx, topic, subject, payload); err != nil {
-		s.log.Warn("pocket core: outbox enqueue failed", "topic", topic, "err", err)
-	}
-}
 
-// publishRun is the worker's OnRun hook: a sync that re-timed a file becomes
-// subtitles.synced, one that needs a person becomes subtitles.failed. Verdicts
-// that changed nothing (in sync, pinned, skipped) are not events.
-func (s *Server) publishRun(sub *store.Subtitle, run *store.Run) {
-	if sub == nil || run == nil {
-		return
+// queueRun is invoked inside the worker's run/job/verdict transaction.
+func (s *Server) queueRun(ctx context.Context, tx *sql.Tx, run *store.Run) error {
+	if run == nil || run.SubtitleID == nil {
+		return nil
 	}
-	payload := map[string]any{
-		"file_id": sub.ID, "run_id": run.ID, "title": sub.Title, "label": sub.Label, "lang": sub.Lang, "name": run.Name,
-		"source": run.Source, "decision": run.Decision, "reason": run.Reason, "method": run.Method, "shift": run.MaxShift, "at": run.CreatedAt,
+	topic := ""
+	if run.Decision == "synced" {
+		topic = "subtitles.synced"
+	} else if store.IsAttention(run.Decision) {
+		topic = "subtitles.failed"
+	} else {
+		return nil
 	}
-	switch {
-	case run.Decision == "synced":
-		s.publish("subtitles.synced", fmt.Sprintf("file:%d", sub.ID), payload)
-	case store.IsAttention(run.Decision):
-		s.publish("subtitles.failed", fmt.Sprintf("file:%d", sub.ID), payload)
-	}
+	return core.QueueEvent(ctx, tx, topic, fmt.Sprintf("file:%d", *run.SubtitleID), map[string]any{"file_id": *run.SubtitleID, "run_id": run.ID, "title": run.Title, "label": run.Label, "lang": run.Lang, "name": run.Name, "source": run.Source, "decision": run.Decision, "reason": run.Reason, "method": run.Method, "shift": run.MaxShift, "at": run.CreatedAt})
 }
-
-// publishNudge announces a hand nudge (the file is pinned by it).
-func (s *Server) publishNudge(sub *store.Subtitle, res *worker.NudgeResult) {
-	if sub == nil || res == nil {
-		return
-	}
-	s.publish("subtitles.nudged", fmt.Sprintf("file:%d", sub.ID), map[string]any{
-		"file_id": sub.ID, "title": sub.Title, "label": sub.Label, "lang": sub.Lang, "name": filepath.Base(sub.Path),
-		"ms": res.MS, "total_ms": res.TotalMS, "cues": res.Cues, "pinned": res.Pinned,
-	})
+func (s *Server) queueNudge(ctx context.Context, tx *sql.Tx, sub *store.Subtitle, res *worker.NudgeResult) error {
+	return core.QueueEvent(ctx, tx, "subtitles.nudged", fmt.Sprintf("file:%d", sub.ID), map[string]any{"file_id": sub.ID, "title": sub.Title, "label": sub.Label, "lang": sub.Lang, "name": filepath.Base(sub.Path), "ms": res.MS, "total_ms": res.TotalMS, "cues": res.Cues, "pinned": res.Pinned})
 }
 
 // resolveSibling asks Core where a sibling app lives (cached a minute) so the

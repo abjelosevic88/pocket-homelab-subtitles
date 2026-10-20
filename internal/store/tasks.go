@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"time"
 )
 
@@ -98,17 +99,22 @@ func (s *Store) FailRunningTasks(ctx context.Context) error {
 // ---- nudges ----
 
 // CreateNudge records a manual shift.
-func (s *Store) CreateNudge(ctx context.Context, n *Nudge) error {
+func (s *Store) CreateNudge(ctx context.Context, n *Nudge, after ...core.CommitHook) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	if n.CreatedAt == "" {
 		n.CreatedAt = Now()
 	}
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO nudges (path, ms, backup, cues, undone, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	res, err := tx.ExecContext(ctx, `INSERT INTO nudges (path, ms, backup, cues, undone, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		n.Path, n.MS, n.Backup, n.Cues, boolInt(n.Undone), n.UserID, n.CreatedAt)
 	if err != nil {
 		return err
 	}
 	n.ID, _ = res.LastInsertId()
-	return nil
+	return core.Commit(tx, after...)
 }
 
 // LastNudge returns the newest not-undone nudge of a file.

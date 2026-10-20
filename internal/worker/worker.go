@@ -5,6 +5,7 @@ package worker
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,9 +47,9 @@ type Worker struct {
 	slots chan struct{} // engine slots shared by syncs and verifications
 	wake  chan struct{}
 
-	// OnRun, when set, is called after every recorded sync run (any source,
-	// any verdict) once the file's verdict is written. Must not block.
-	OnRun func(sub *store.Subtitle, run *store.Run)
+	// OnRun writes the Core event inside the run's database transaction.
+	OnRun   func(context.Context, *sql.Tx, *store.Run) error
+	OnNudge func(context.Context, *sql.Tx, *store.Subtitle, *NudgeResult) error
 
 	// Services reaches Bazarr and Jellyfin (Pocket Core, direct or off);
 	// nil = the URLs and keys under Settings only.
@@ -289,16 +290,41 @@ func (w *Worker) process(ctx context.Context, job *store.Job) {
 
 	st, _ := w.st.GetSettings(ctx)
 	finish := func(run *store.Run, state, errMsg string) {
-		var runID *int64
-		if run != nil {
-			if err := w.st.CreateRun(ctx, run); err != nil {
-				w.log.Error("record run", "err", err)
-			} else {
-				runID = &run.ID
+		if run == nil {
+			if err := w.st.FinishJob(ctx, job.ID, state, nil, errMsg); err != nil {
+				w.log.Error("finish job", "err", err)
+			}
+			return
+		}
+		var v *store.Verdict
+		if run.Decision != "pinned" && run.SubtitleID != nil {
+			if sub, err := w.Resolve(ctx, run.Path); err == nil {
+				v = &store.Verdict{Decision: run.Decision, Reason: run.Reason, Method: run.Method, Shift: run.MaxShift}
+				v.SubSize, v.SubMtime = sig(sub.Path)
+				v.VidSize, v.VidMtime = sig(sub.VideoPath)
 			}
 		}
-		_ = w.st.FinishJob(ctx, job.ID, state, runID, errMsg)
+		err := w.st.CreateRun(ctx, run, func(tx *sql.Tx) error {
+			if _, err := tx.ExecContext(ctx, `UPDATE jobs SET state=?,run_id=?,error=?,stage='',finished_at=? WHERE id=?`, state, run.ID, errMsg, store.Now(), job.ID); err != nil {
+				return err
+			}
+			if v != nil {
+				if _, err := tx.ExecContext(ctx, `UPDATE subtitles SET last_decision=?,last_reason=?,last_method=?,last_shift=?,last_run_id=?,sub_size=?,sub_mtime=?,vid_size=?,vid_mtime=?,last_checked_at=? WHERE path=?`, v.Decision, v.Reason, v.Method, v.Shift, run.ID, v.SubSize, v.SubMtime, v.VidSize, v.VidMtime, run.CreatedAt, run.Path); err != nil {
+					return err
+				}
+			}
+			if w.OnRun != nil {
+				return w.OnRun(ctx, tx, run)
+			}
+			return nil
+		})
+		if err != nil {
+			run.ID = 0
+			w.log.Error("record run and event", "err", err)
+			_ = w.st.FinishJob(ctx, job.ID, "failed", nil, "could not record outcome: "+err.Error())
+		}
 	}
+
 	newRun := func(sub *store.Subtitle, decision, reason string) *store.Run {
 		r := &store.Run{Path: job.Path, Name: filepath.Base(job.Path), Title: job.Title, Label: job.Label, Lang: job.Lang,
 			Source: job.Source, Decision: decision, Reason: reason, JobID: &job.ID, DurationMS: time.Since(started).Milliseconds()}
@@ -406,14 +432,8 @@ func (w *Worker) process(ctx context.Context, job *store.Job) {
 
 // afterRun writes the verdict onto the file's row and sends notifications.
 func (w *Worker) afterRun(ctx context.Context, st store.Settings, sub *store.Subtitle, run *store.Run) {
-	if run.Decision != "pinned" {
-		v := store.Verdict{Decision: run.Decision, Reason: run.Reason, Method: run.Method, Shift: run.MaxShift, RunID: run.ID, CheckedAt: run.CreatedAt}
-		v.SubSize, v.SubMtime = sig(sub.Path)
-		v.VidSize, v.VidMtime = sig(sub.VideoPath)
-		_ = w.st.SetVerdict(ctx, sub.Path, v)
-	}
-	if w.OnRun != nil {
-		w.OnRun(sub, run)
+	if run.ID == 0 {
+		return
 	}
 	if run.Source == "sweep" {
 		return // the sweep sends one summary

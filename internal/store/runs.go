@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"strings"
 	"time"
 )
@@ -25,7 +26,12 @@ func scanRun(row interface{ Scan(...any) error }, details *string) (*Run, error)
 }
 
 // CreateRun records one finished engine run.
-func (s *Store) CreateRun(ctx context.Context, r *Run) error {
+func (s *Store) CreateRun(ctx context.Context, r *Run, after ...core.CommitHook) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	if r.CreatedAt == "" {
 		r.CreatedAt = Now()
 	}
@@ -33,14 +39,14 @@ func (s *Store) CreateRun(ctx context.Context, r *Run) error {
 	if len(r.Details) > 0 {
 		details = string(r.Details)
 	}
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO runs (subtitle_id, path, name, title, label, lang, source, decision, method, max_shift, content_fit, ref_fit, reason, duration_ms, details, job_id, created_at)
+	res, err := tx.ExecContext(ctx, `INSERT INTO runs (subtitle_id, path, name, title, label, lang, source, decision, method, max_shift, content_fit, ref_fit, reason, duration_ms, details, job_id, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.SubtitleID, r.Path, r.Name, r.Title, r.Label, r.Lang, r.Source, r.Decision, r.Method, r.MaxShift, r.ContentFit, r.RefFit, r.Reason, r.DurationMS, details, r.JobID, r.CreatedAt)
 	if err != nil {
 		return err
 	}
 	r.ID, _ = res.LastInsertId()
-	return nil
+	return core.Commit(tx, after...)
 }
 
 // GetRun returns one run with its full engine details.
