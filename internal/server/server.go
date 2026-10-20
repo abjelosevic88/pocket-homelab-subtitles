@@ -52,6 +52,7 @@ type Server struct {
 	coreMu   sync.Mutex
 	coreOK   bool
 	coreErr  string
+	modesMu  sync.Mutex // one connection-mode report to Core at a time
 	resolved map[string]resolvedURL
 }
 
@@ -339,7 +340,8 @@ func userIDPtr(r *http.Request) *int64 {
 // ---- Pocket Core ----
 
 // coreLoop registers with Core on start (retrying until it answers) and
-// re-registers every 30 minutes so version and last-seen stay fresh.
+// re-registers every 30 minutes so version and last-seen stay fresh; each
+// successful registration is followed by a report of the connection modes.
 func (s *Server) coreLoop(ctx context.Context) {
 	wait := 5 * time.Second
 	for {
@@ -354,6 +356,7 @@ func (s *Server) coreLoop(ctx context.Context) {
 			s.log.Warn("pocket core: registration failed, retrying", "err", err, "in", wait.String())
 		} else {
 			wait = 30 * time.Minute
+			s.reportModes(ctx) // on start and every 30 minutes: how the app reaches Bazarr and Jellyfin
 		}
 		select {
 		case <-ctx.Done():
@@ -363,6 +366,25 @@ func (s *Server) coreLoop(ctx context.Context) {
 		if err != nil && wait < 5*time.Minute {
 			wait *= 2
 		}
+	}
+}
+
+// reportModes tells Core how the app reaches Bazarr and Jellyfin (the modes
+// in effect, as the admin it acts as). Only with a Core; failures are logged.
+func (s *Server) reportModes(ctx context.Context) {
+	if !s.core.Configured() {
+		return
+	}
+	s.modesMu.Lock() // one report at a time, so an older one never lands after a newer one
+	defer s.modesMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	st, err := s.store.GetSettings(ctx)
+	if err == nil {
+		err = s.svc.Report(ctx, st)
+	}
+	if err != nil {
+		s.log.Warn("pocket core: reporting connection modes failed", "err", err)
 	}
 }
 

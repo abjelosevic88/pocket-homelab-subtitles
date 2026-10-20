@@ -123,6 +123,16 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "save settings")
 		return
 	}
+	// a switch or a Disconnect: Core's Links page follows right away
+	changed := in.BazarrMode != cur.BazarrMode || in.JellyfinMode != cur.JellyfinMode
+	for _, typ := range []string{services.Bazarr, services.Jellyfin} {
+		changed = changed || s.svc.ModeOf(in, typ) != s.svc.ModeOf(cur, typ)
+	}
+	disconnect := (cur.BazarrAPIKey != "" && in.BazarrAPIKey == "") || (cur.JellyfinAPIKey != "" && in.JellyfinAPIKey == "") ||
+		(cur.BazarrURL != "" && in.BazarrURL == "") || (cur.JellyfinURL != "" && in.JellyfinURL == "")
+	if changed || disconnect {
+		go s.reportModes(context.Background())
+	}
 	s.wantedMu.Lock()
 	s.wanted.at = time.Time{}
 	s.wantedMu.Unlock()
@@ -155,8 +165,9 @@ func (s *Server) handleTestIntegration(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	switch chi.URLParam(r, "what") {
 	case "bazarr":
-		// the saved mode decides: Pocket Core, the URL and key here, or off
-		c, conn, err := s.svc.Bazarr(ctx, st)
+		// the saved mode decides: Pocket Core (asked afresh, not the cached
+		// credential), the URL and key here, or off
+		c, conn, err := s.svc.BazarrFresh(ctx, st)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -173,7 +184,7 @@ func (s *Server) handleTestIntegration(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"message": msg, "via": conn.Via, "source": conn.Source})
 	case "jellyfin":
-		c, conn, err := s.svc.Jellyfin(ctx, st)
+		c, conn, err := s.svc.JellyfinFresh(ctx, st)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return

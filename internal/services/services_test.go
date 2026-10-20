@@ -77,3 +77,39 @@ func TestJellyfinRefreshThroughResolver(t *testing.T) {
 		t.Fatalf("direct used %v", got[len(got)-1])
 	}
 }
+
+// Normal work uses the SDK's credential cache; ForFresh asks Core every time.
+// Modes are the modes in effect for the admin, defaults included.
+func TestCacheFreshAndModes(t *testing.T) {
+	n := 0
+	cr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		_ = json.NewEncoder(w).Encode(map[string]string{"url": "http://bazarr:6767", "key": "k", "source": "box"})
+	}))
+	defer cr.Close()
+	r := &Resolver{Core: core.New(cr.URL, core.Options{Token: "pca_x"}), Owner: func(context.Context) string { return "admin@example.com" }}
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		if _, err := r.For(ctx, store.Settings{}, Bazarr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n != 1 {
+		t.Fatalf("Core asked %d times, want once (cached)", n)
+	}
+	if _, _, err := r.BazarrFresh(ctx, store.Settings{}); err != nil || n != 2 {
+		t.Fatalf("fresh: %v, Core asked %d times", err, n)
+	}
+	modes := r.Modes(ctx, store.Settings{JellyfinURL: "http://jf", JellyfinAPIKey: "saved"})
+	if len(modes) != 2 || modes[0] != (core.ConnMode{User: "admin@example.com", Target: "service:bazarr", Mode: ModeCore}) ||
+		modes[1] != (core.ConnMode{User: "admin@example.com", Target: "service:jellyfin", Mode: ModeDirect}) {
+		t.Fatalf("modes %+v", modes)
+	}
+	if (&Resolver{Core: r.Core}).Modes(ctx, store.Settings{}) != nil {
+		t.Fatal("no admin: nothing to report")
+	}
+	var none *Resolver
+	if err := none.Report(ctx, store.Settings{}); err != nil {
+		t.Fatal("no Core: Report is a no-op")
+	}
+}

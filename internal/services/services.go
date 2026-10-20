@@ -5,8 +5,14 @@
 // Both services are box-wide (the app syncs subtitles for the whole library),
 // so through Core the app acts as the admin who owns it: ADMIN_EMAIL when set,
 // else the first admin account. Core hands that admin their own key there, or
-// the box's key (Core gives the box-wide key to admins). Every use asks Core
-// again, so a switch-off in Core applies at once; the key is never kept.
+// the box's key (Core gives the box-wide key to admins). The SDK reuses that
+// credential for about a minute (a switch-off in Core applies within that, a
+// refusal at once) and rides out a Core restart; connection tests ask afresh.
+// The app never keeps the key itself.
+//
+// The mode in effect for each service is reported to Core (service:bazarr,
+// service:jellyfin, for that admin) so Core's Links page shows Direct
+// connections too; see Report.
 package services
 
 import (
@@ -131,8 +137,18 @@ func coreErr(name string, err error) error {
 	return fmt.Errorf("%s through Pocket Core: %w", name, err)
 }
 
-// For returns where the service is reached now, following its mode.
+// For returns where the service is reached now, following its mode. Through
+// Core it uses the SDK's credential cache (ServiceFor).
 func (r *Resolver) For(ctx context.Context, st store.Settings, typ string) (*Conn, error) {
+	return r.resolve(ctx, st, typ, false)
+}
+
+// ForFresh is For asking Core afresh (ServiceForFresh): connection tests.
+func (r *Resolver) ForFresh(ctx context.Context, st store.Settings, typ string) (*Conn, error) {
+	return r.resolve(ctx, st, typ, true)
+}
+
+func (r *Resolver) resolve(ctx context.Context, st store.Settings, typ string, fresh bool) (*Conn, error) {
 	name := Names[typ]
 	mode, url, key := saved(st, typ)
 	switch Mode(mode, key, r.coreOn()) {
@@ -151,7 +167,13 @@ func (r *Resolver) For(ctx context.Context, st store.Settings, typ string) (*Con
 	if email == "" {
 		return nil, fmt.Errorf("%s through Pocket Core: no admin account to act as", name)
 	}
-	cred, err := r.Core.ServiceFor(ctx, email, typ)
+	var cred *core.ServiceCred
+	var err error
+	if fresh {
+		cred, err = r.Core.ServiceForFresh(ctx, email, typ)
+	} else {
+		cred, err = r.Core.ServiceFor(ctx, email, typ)
+	}
 	if err != nil {
 		return nil, coreErr(name, err)
 	}
@@ -174,7 +196,16 @@ func (r *Resolver) For(ctx context.Context, st store.Settings, typ string) (*Con
 
 // Bazarr is a Bazarr client for the connection in effect (nil + why not).
 func (r *Resolver) Bazarr(ctx context.Context, st store.Settings) (*bazarr.Client, *Conn, error) {
-	c, err := r.For(ctx, st, Bazarr)
+	return r.bazarr(ctx, st, false)
+}
+
+// BazarrFresh is Bazarr asking Core afresh (Test connection).
+func (r *Resolver) BazarrFresh(ctx context.Context, st store.Settings) (*bazarr.Client, *Conn, error) {
+	return r.bazarr(ctx, st, true)
+}
+
+func (r *Resolver) bazarr(ctx context.Context, st store.Settings, fresh bool) (*bazarr.Client, *Conn, error) {
+	c, err := r.resolve(ctx, st, Bazarr, fresh)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -183,11 +214,43 @@ func (r *Resolver) Bazarr(ctx context.Context, st store.Settings) (*bazarr.Clien
 
 // Jellyfin is a Jellyfin client for the connection in effect (nil + why not).
 func (r *Resolver) Jellyfin(ctx context.Context, st store.Settings) (*jellyfin.Client, *Conn, error) {
-	c, err := r.For(ctx, st, Jellyfin)
+	return r.jellyfin(ctx, st, false)
+}
+
+// JellyfinFresh is Jellyfin asking Core afresh (Test connection).
+func (r *Resolver) JellyfinFresh(ctx context.Context, st store.Settings) (*jellyfin.Client, *Conn, error) {
+	return r.jellyfin(ctx, st, true)
+}
+
+func (r *Resolver) jellyfin(ctx context.Context, st store.Settings, fresh bool) (*jellyfin.Client, *Conn, error) {
+	c, err := r.resolve(ctx, st, Jellyfin, fresh)
 	if err != nil {
 		return nil, nil, err
 	}
 	return jellyfin.New(c.URL, c.Key, st.JellyfinPathMap), c, nil
+}
+
+// Modes are the modes in effect (what Settings → Integrations shows,
+// defaults included) for the admin the app acts as: service:bazarr and
+// service:jellyfin. Nil without an admin.
+func (r *Resolver) Modes(ctx context.Context, st store.Settings) []core.ConnMode {
+	email := r.owner(ctx)
+	if email == "" {
+		return nil
+	}
+	return []core.ConnMode{
+		{User: email, Target: "service:" + Bazarr, Mode: r.ModeOf(st, Bazarr)},
+		{User: email, Target: "service:" + Jellyfin, Mode: r.ModeOf(st, Jellyfin)},
+	}
+}
+
+// Report tells Core the modes in effect (report only: Core decides nothing on
+// it). A no-op without a Core or an admin.
+func (r *Resolver) Report(ctx context.Context, st store.Settings) error {
+	if !r.coreOn() {
+		return nil
+	}
+	return r.Core.ReportModes(ctx, r.Modes(ctx, st))
 }
 
 // Status is a service's state for Settings, without fetching a key.

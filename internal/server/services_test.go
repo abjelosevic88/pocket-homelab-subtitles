@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/store"
@@ -61,6 +62,8 @@ type fakeCore struct {
 	source string
 	asked  []string // "<auth> <user> <type>"
 	status int
+	modes  map[string]string // "<user> <target>" → last reported mode
+	report int               // PUT /links/modes calls
 }
 
 func newFakeCore(t *testing.T, target string) *fakeCore {
@@ -81,6 +84,25 @@ func newFakeCore(t *testing.T, target string) *fakeCore {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"type": in.Type, "url": target, "public_url": "https://" + in.Type + ".example.org",
 				"key": "core-" + in.Type + "-key", "source": fc.source})
+		case "/api/v1/apps/register":
+			_ = json.NewEncoder(w).Encode(map[string]any{"app": map[string]any{"slug": "subtitles"}})
+		case "/api/v1/links/modes":
+			if r.Method != http.MethodPut || r.Header.Get("Authorization") != "Bearer pca_subtitles" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			var in struct {
+				Modes []struct{ User, Target, Mode string }
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			if fc.modes == nil {
+				fc.modes = map[string]string{}
+			}
+			for _, m := range in.Modes {
+				fc.modes[m.User+" "+m.Target] = m.Mode
+			}
+			fc.report++
+			_ = json.NewEncoder(w).Encode(map[string]any{"recorded": len(in.Modes)})
 		case "/api/v1/links/status":
 			fc.status++
 			typ := strings.TrimPrefix(r.URL.Query().Get("app"), "service:")
@@ -101,6 +123,29 @@ func (fc *fakeCore) credentialCalls() []string {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 	return append([]string{}, fc.asked...)
+}
+
+// reported is the last mode Core heard for the admin and a service, and how many reports came in.
+func (fc *fakeCore) reported(typ string) (string, int) {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	return fc.modes["admin@example.com service:"+typ], fc.report
+}
+
+// waitReported waits until Core heard want for the service (reports go out in the background).
+func waitReported(t *testing.T, fc *fakeCore, typ, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, _ := fc.reported(typ)
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Core heard %q for %s, want %q", got, typ, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func (fc *fakeCore) statusCalls() int {
@@ -147,7 +192,8 @@ func servicesSetup(t *testing.T, coreURL string, mod func(*config.Config)) (*Ser
 		t.Fatal(err)
 	}
 	st := openTestStore(t, cfg)
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background()) // stops the Core loop Bootstrap starts
+	t.Cleanup(cancel)
 	member := &store.User{Email: "member@example.com", Name: "M", Role: "member", PasswordHash: "x"}
 	admin := &store.User{Email: "admin@example.com", Name: "A", Role: "admin", PasswordHash: "x"}
 	for _, u := range []*store.User{member, admin} {
@@ -174,7 +220,7 @@ func servicesSetup(t *testing.T, coreURL string, mod func(*config.Config)) (*Ser
 func TestServicesThroughCore(t *testing.T) {
 	rc := newRecorder(t)
 	fc := newFakeCore(t, rc.srv.URL)
-	_, _, api := servicesSetup(t, fc.srv.URL, nil)
+	s, _, api := servicesSetup(t, fc.srv.URL, nil)
 
 	code, st := api.do("GET", "/settings", nil)
 	if code != 200 || st["bazarr_mode"] != "core" || st["bazarr_via"] != "core" || st["jellyfin_mode"] != "core" || st["jellyfin_via"] != "core" || st["services_as"] != "admin@example.com" {
@@ -198,13 +244,24 @@ func TestServicesThroughCore(t *testing.T) {
 	if _, st = api.do("GET", "/settings", nil); st["bazarr_source"] != "box" {
 		t.Fatalf("bazarr source = %v", st["bazarr_source"])
 	}
-	// missing subtitles: Core again (not cached), link to Core's public URL
+	// missing subtitles: Core again (tests ask afresh and fill no cache), link to Core's public URL
 	code, miss := api.do("GET", "/issues/missing", nil)
 	if code != 200 || miss["configured"] != true || miss["bazarr_url"] != "https://bazarr.example.org" {
 		t.Fatalf("missing: %d %v", code, miss)
 	}
 	if n := len(fc.credentialCalls()); n != 3 {
-		t.Fatalf("core asked %d times, want once per use", n)
+		t.Fatalf("core asked %d times, want 3", n)
+	}
+	// normal work within the minute reuses the cached credential; a test asks again
+	set, _ := s.store.GetSettings(context.Background())
+	if _, err := s.svc.For(context.Background(), set, "bazarr"); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(fc.credentialCalls()); n != 3 {
+		t.Fatalf("core asked %d times, want the cached credential", n)
+	}
+	if code, _ := api.do("POST", "/settings/test/bazarr", nil); code != 200 || len(fc.credentialCalls()) != 4 {
+		t.Fatalf("test: %d, core asked %d times, want a fresh ask", code, len(fc.credentialCalls()))
 	}
 }
 
@@ -325,5 +382,52 @@ func TestIntegrationsSeededOnce(t *testing.T) {
 	}
 	if set, _ = st.GetSettings(ctx); set.BazarrAPIKey != "" || set.BazarrURL != "" {
 		t.Fatalf("re-seeded after a Disconnect: %q %q", set.BazarrURL, set.BazarrAPIKey)
+	}
+}
+
+// Core hears the modes in effect for the admin the app acts as after
+// registering (defaults included), and again right after a switch or a
+// Disconnect; an unrelated save reports nothing.
+func TestServicesModesReported(t *testing.T) {
+	rc := newRecorder(t)
+	fc := newFakeCore(t, rc.srv.URL)
+	_, _, api := servicesSetup(t, fc.srv.URL, nil)
+	waitReported(t, fc, "bazarr", "core")
+	waitReported(t, fc, "jellyfin", "core")
+
+	_, st := api.do("GET", "/settings", nil)
+	st["bazarr_mode"] = "off"
+	_, st = api.do("PUT", "/settings", st)
+	waitReported(t, fc, "bazarr", "off")
+	st["jellyfin_mode"], st["jellyfin_url"], st["jellyfin_api_key"] = "direct", rc.srv.URL, "jf-key"
+	_, st = api.do("PUT", "/settings", st)
+	waitReported(t, fc, "jellyfin", "direct")
+	if m, _ := fc.reported("bazarr"); m != "off" {
+		t.Fatalf("bazarr reported %q", m)
+	}
+	// Disconnect: the mode stays direct, and Core hears it again
+	_, n := fc.reported("jellyfin")
+	delete(st, "jellyfin_api_key_set")
+	st["jellyfin_url"], st["jellyfin_api_key"] = "", ""
+	_, st = api.do("PUT", "/settings", st)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, n2 := fc.reported("jellyfin"); n2 > n {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a Disconnect was not reported")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// an unrelated save does not report
+	_, n = fc.reported("jellyfin")
+	st["title"] = "Subs"
+	if code, _ := api.do("PUT", "/settings", st); code != 200 {
+		t.Fatalf("PUT: %d", code)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, n2 := fc.reported("jellyfin"); n2 != n {
+		t.Fatalf("an unrelated save reported (%d → %d)", n, n2)
 	}
 }

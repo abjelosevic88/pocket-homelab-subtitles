@@ -61,7 +61,7 @@ Two layers:
 
 **Sync → Nightly sweep**: on/off, start time, time budget, *re-check verdicts older than* (after an engine change), managed languages, auto-unpin on a new download, verification tolerance.
 
-**Integrations**: Bazarr and Jellyfin, each with a **Pocket Core | Direct | Off** switch (saved at once) and a path mapping; notifications (Apprise API URL, ntfy topic URL, or a webhook receiving `{title, body, level, app}`), season tools (languages, manual-search languages, preferred provider).
+**Integrations**: Bazarr and Jellyfin, each with a **Pocket Core | Off** switch (saved at once; with no Pocket Core, or while Direct is in use, **Pocket Core | Direct | Off**, else Direct sits behind *Advanced: connect directly with a URL and key*) and a path mapping; notifications (Apprise API URL, ntfy topic URL, or a webhook receiving `{title, body, level, app}`), season tools (languages, manual-search languages, preferred provider).
 
 ## Path mappings
 
@@ -74,10 +74,12 @@ Both are box-wide: the app syncs subtitles for the whole library, not for one pe
 
 | Mode | How it is reached |
 |---|---|
-| **Pocket Core** | Pocket Core's service connection (`services: bazarr, jellyfin` in the manifest): Core hands out the service's address and key on **every use** (`POST /api/v1/services/credential`), so switching it off in Core applies at once and nothing is kept here. The app acts as **the admin** (`ADMIN_EMAIL` when that account exists, else the first admin), so Core gives that admin's own key there or, failing that, the box's key (Core's rule for admins). Links (Issues → *Open Bazarr*) use Core's public URL. |
+| **Pocket Core** | Pocket Core's service connection (`services: bazarr, jellyfin` in the manifest): Core hands out the service's address and key (`POST /api/v1/services/credential`); the Core SDK reuses it for about a minute, so switching it off in Core applies within a minute (a refusal at once) and a Core restart does not stop syncs. **Test** always asks Core afresh. The app keeps no key itself. The app acts as **the admin** (`ADMIN_EMAIL` when that account exists, else the first admin), so Core gives that admin's own key there or, failing that, the box's key (Core's rule for admins). Links (Issues → *Open Bazarr*) use Core's public URL. |
 | **Direct** | The URL and API key saved here (how it always worked). **Disconnect** removes both. |
 | **Off** | No calls at all: no missing counts, no blacklisting, no season reset, no Jellyfin refresh. |
 
 With no mode stored: Direct when a key is saved (an existing setup keeps working), else Pocket Core when `CORE_URL` is set, else Direct. The card shows *Connected through Pocket Core (the admin's own key / the box's key), as the admin …*, a direct connection, or *Not connected:* with Core's reason (switched off for the box or by the admin, no key there, no such service in Core…). The status asks Core only for the link state (`GET /api/v1/links/status`), never the key. Path mappings apply in every mode.
+
+The modes in effect are reported to Core for the admin the app acts as (`PUT /api/v1/links/modes`, targets `service:bazarr` and `service:jellyfin`) after registering, every 30 minutes and right after a switch or a Disconnect, so Core's Links page shows Direct connections too. Report only; failures are logged.
 
 `GET /api/v1/settings` carries `bazarr_mode` / `jellyfin_mode` (in effect; a PUT stores them), `*_via` (`core` | `direct` | empty), `*_source` (`personal` | `box`, from the last use), `*_detail` and `services_as`. `POST /api/v1/settings/test/{bazarr,jellyfin}` follows the mode.

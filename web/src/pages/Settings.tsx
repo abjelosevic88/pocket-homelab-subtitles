@@ -138,10 +138,15 @@ const connBadge = (mode: ConnMode, via?: string) => mode === 'off' ? <span class
   : <span className="badge warn">not connected</span>
 
 /** Pocket Core | Direct | Off for one service; the switch is saved at once. */
+/** Pocket Core | Off for Bazarr or Jellyfin, with Direct as an advanced option when the
+ * box has a Pocket Core (always shown while it is the current mode, and shown normally
+ * without a Core); the switch saves at once. */
 function Connection({ app, mode, via, source, detail, as, core, disabled, onMode, onDisconnect, hasKey, test, direct }: {
   app: string; mode: ConnMode; via?: string; source?: string; detail?: string; as?: string; core: boolean; disabled: boolean
   onMode: (m: ConnMode) => void; onDisconnect: () => void; hasKey: boolean; test: React.ReactNode; direct: React.ReactNode
 }) {
+  const [advanced, setAdvanced] = useState(false)
+  const showDirect = !core || mode === 'direct' || advanced
   const ok = !!via
   const whose = source === 'personal' ? " (the admin's own key)" : source === 'box' ? " (the box's key)" : ''
   const line = mode === 'off' ? `Off: Pocket Subtitles does not talk to ${app}.`
@@ -150,10 +155,11 @@ function Connection({ app, mode, via, source, detail, as, core, disabled, onMode
   return (
     <div className="conn-block">
       <div><Segmented size="sm" value={mode} onChange={m => !disabled && onMode(m)} options={[
-        { value: 'core', label: 'Pocket Core', title: core ? `Through Pocket Core, as the admin ${as || ''}` : 'There is no Pocket Core on this box' },
-        { value: 'direct', label: 'Direct', title: 'A URL and API key saved here' },
-        { value: 'off', label: 'Off' },
-      ]} /></div>
+        { value: 'core' as const, label: 'Pocket Core', title: core ? `Through Pocket Core, as the admin ${as || ''}` : 'There is no Pocket Core on this box' },
+        { value: 'direct' as const, label: 'Direct', title: 'A URL and API key saved here' },
+        { value: 'off' as const, label: 'Off' },
+      ].filter(o => o.value !== 'direct' || showDirect)} /></div>
+      {!showDirect && !disabled && <div><button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with a URL and key</button></div>}
       <div className={`conn-status ${mode === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{line}</div>
       {mode === 'direct' && <>
         {direct}

@@ -384,6 +384,9 @@ a.fname-link:hover { text-decoration: none; } a.fname-link:hover .fname { color:
 
 /* service connections: Pocket Core | Direct | Off */
 .conn-block { display: grid; gap: 12px; }
+.link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
+.link-btn.small { font-size: 12px; }
+.link-btn:hover { text-decoration: underline; }
 .conn-status { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--muted); padding: 8px 10px; border-radius: 8px; background: var(--surface-2); line-height: 1.4; }
 .conn-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; margin-top: 5px; }
 .conn-status.ok { color: var(--text); }
