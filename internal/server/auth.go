@@ -78,7 +78,7 @@ func (s *Server) resolveUser(r *http.Request) (*store.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.store.GetSessionUser(ctx, c.Value)
+	return s.sessionUser(ctx, c.Value)
 }
 
 // coreUser validates a token Pocket Core issued to a paired phone (pcd_), a
@@ -92,7 +92,7 @@ func (s *Server) coreUser(ctx context.Context, tok string) (*store.User, error) 
 	if !in.Active || in.User == nil || in.User.Email == "" {
 		return nil, http.ErrNoCookie
 	}
-	return s.firstOrSystemUser(ctx, strings.ToLower(in.User.Email), in.User.Name)
+	return s.coreIdentityUser(ctx, in)
 }
 
 // firstOrSystemUser returns the user with that email, creating it when missing.
