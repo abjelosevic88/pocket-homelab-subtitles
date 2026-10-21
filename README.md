@@ -44,14 +44,14 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
   </tr>
 </table>
 
-<p align="center"><img src="docs/screenshots/integrations.png" width="900" alt="Settings → Integrations: Bazarr with path mapping, Jellyfin / Emby, notifications, and the post-processing command for Bazarr with a token filled in"></p>
-<p align="center"><sub>Settings → Integrations: Bazarr, Jellyfin, notifications, and the command to paste into Bazarr.</sub></p>
+<p align="center"><img src="docs/screenshots/integrations.png" width="900" alt="Settings → Integrations: Bazarr with path mapping, and the post-processing command for Bazarr with a token filled in"></p>
+<p align="center"><sub>Settings → Integrations: Bazarr, the command to paste into Bazarr, season tools and Jellyfin.</sub></p>
 
 <p align="center">
   <img src="docs/screenshots/mobile.png" width="240" alt="Overview on a phone">&nbsp;&nbsp;
   <img src="docs/screenshots/mobile-nudge.png" width="240" alt="Nudge on a phone: the quick shifts, undo, unpin and the recent nudges">&nbsp;&nbsp;
   <img src="docs/screenshots/overview-dark.png" width="520" alt="Overview in dark mode"><br>
-  <sub>Installable PWA with a bottom tab bar (the overview, a nudge), plus dark mode.</sub>
+  <sub>Installable PWA: a sidebar drawer and a nudge button on phones (the overview, a nudge), dark mode that follows the system, ⌘K search.</sub>
 </p>
 
 ## Features

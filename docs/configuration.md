@@ -61,7 +61,11 @@ Two layers:
 
 **Sync → Nightly sweep**: on/off, start time, time budget, *re-check verdicts older than* (after an engine change), managed languages, auto-unpin on a new download, verification tolerance.
 
-**Integrations**: Bazarr and Jellyfin, each with a **Pocket Core | Off** switch (saved at once; with no Pocket Core, or while Direct is in use, **Pocket Core | Direct | Off**, else Direct sits behind *Advanced: connect directly with a URL and key*) and a path mapping; notifications (Apprise API URL, ntfy topic URL, or a webhook receiving `{title, body, level, app}`), season tools (languages, manual-search languages, preferred provider).
+**Integrations**: Bazarr and Jellyfin, each with a **Pocket Core | Off** switch (saved at once; with no Pocket Core, or while Direct is in use, **Pocket Core | Direct | Off**, else Direct sits behind *Advanced: connect directly with a URL and key*) and a path mapping; the post-processing command for Bazarr; season tools (languages, manual-search languages, preferred provider).
+
+**Notifications**: Apprise API URL, ntfy topic URL, or a webhook receiving `{title, body, level, app}`; failures and rejections, every adjusted file, the sweep summary.
+
+Each section has its own address (`/settings/sync`, `/settings/integrations`, `/settings/notifications`, …); old `/settings?tab=…` links still work.
 
 ## Path mappings
 
