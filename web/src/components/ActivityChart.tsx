@@ -25,7 +25,7 @@ export function ActivityChart({ days }: { days: DayCount[] }) {
         <ul className="legend" aria-label="Legend">
           {SERIES.map(s => <li key={s.key}><span className={`key ${s.cls}`} />{s.label}</li>)}
         </ul>
-        <button className="btn ghost sm" onClick={() => setTable(t => !t)}>{table ? 'Chart' : 'Table'}</button>
+        <button type="button" className="btn ghost sm" onClick={() => setTable(t => !t)}>{table ? 'Chart' : 'Table'}</button>
       </div>
       {table ? (
         <table className="table compact">

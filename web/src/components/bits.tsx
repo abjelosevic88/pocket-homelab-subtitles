@@ -1,10 +1,20 @@
+import type React from 'react'
 import { Link } from 'react-router-dom'
 import { decisionInfo, fileTitle, fmtShift } from '../lib/format'
+import { Icon } from './icons'
+
+// the engine's verdict glyphs as stroke icons
+const GLYPH_ICON: Record<string, string> = { '✓': 'check', '⚠': 'alert', '✕': 'x', '📌': 'pushpin', '–': 'minus', '…': 'more', '●': 'dot', '○': 'circle', '•': 'dot' }
 
 /** Status pill: icon + label (never colour alone). */
 export function Decision({ d, size = '' }: { d: string; size?: '' | 'lg' }) {
   const i = decisionInfo(d)
-  return <span className={`status s-${i.cls} ${size}`}><span aria-hidden>{i.icon}</span> {i.label}</span>
+  return <span className={`status s-${i.cls} ${size}`}><Icon name={GLYPH_ICON[i.icon] || 'dot'} size={size === 'lg' ? 14 : 12} strokeWidth={2.2} />{i.label}</span>
+}
+
+/** A status pill with its own icon and label. */
+export function StatusPill({ cls, icon, children }: { cls: 'good' | 'mut' | 'warn' | 'crit' | 'info'; icon: string; children: React.ReactNode }) {
+  return <span className={`status s-${cls}`}><Icon name={icon} size={12} strokeWidth={2.2} />{children}</span>
 }
 
 export function Lang({ lang, flags }: { lang: string; flags?: string }) {
@@ -26,7 +36,7 @@ export function FileName({ f, id }: { f: { title: string; label: string; lang?: 
 
 export function Pin({ on, note }: { on: boolean; note?: string }) {
   if (!on) return null
-  return <span className="badge pin" title={note || 'Pinned: no automatic sync touches it'}>📌 pinned</span>
+  return <span className="badge pin" title={note || 'Pinned: no automatic sync touches it'}><Icon name="pushpin" size={11} strokeWidth={2.2} />pinned</span>
 }
 
 export function Progress({ done, total }: { done: number; total: number }) {

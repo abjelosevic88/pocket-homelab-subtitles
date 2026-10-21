@@ -5,7 +5,8 @@ import { useApp } from '../lib/app-context'
 import type { Subtitle, Task, TitleSummary } from '../lib/types'
 import { ago, fmtMs } from '../lib/format'
 import { Card, Confirm, Empty, Loading, Modal, PageHeader, Segmented, useAsync, useDebounce, useToast } from '../components/ui'
-import { Decision, Lang, Pin, Shift } from '../components/bits'
+import { Decision, Lang, Pin, Shift, StatusPill } from '../components/bits'
+import { Icon } from '../components/icons'
 
 const STATUSES = [
   { value: '', label: 'All' }, { value: 'attention', label: 'Needs attention' }, { value: 'synced', label: 'Adjusted' },
@@ -27,9 +28,9 @@ export default function Library() {
   const files = (data || []).reduce((a, t) => a + t.files, 0)
   return (
     <>
-      <PageHeader title="Library" sub={data ? `${data.length.toLocaleString()} shows & movies · ${files.toLocaleString()} subtitle files` : ' '} actions={<button className="btn" onClick={scan}>Rescan</button>} />
+      <PageHeader title="Library" sub={data ? `${data.length.toLocaleString()} shows & movies · ${files.toLocaleString()} subtitle files` : ' '} actions={<button type="button" className="btn" onClick={scan}><Icon name="refresh" size={15} />Rescan</button>} />
       <div className="toolbar">
-        <div className="search"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search titles and files…" autoFocus /></div>
+        <div className="search"><Icon name="search" size={15} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search titles and files…" autoFocus /></div>
         {libraries.length > 1 && <Segmented size="sm" value={lib} onChange={v => set('library', v)} options={[{ value: '', label: 'All' }, ...libraries.map(l => ({ value: l, label: l }))]} />}
       </div>
       <div className="filters"><Segmented size="sm" value={status} onChange={v => set('status', v)} options={STATUSES} /></div>
@@ -37,7 +38,7 @@ export default function Library() {
         <div className="title-grid">
           {data.map(t => (
             <Link key={t.library + t.title} className="card title-card" to={`/library/t/${encodeURIComponent(t.title)}${status ? `?status=${status}` : ''}`}>
-              <div className="row"><span className="nm grow">{t.title}</span>{t.attention > 0 && <span className="status s-warn">⚠ {t.attention}</span>}</div>
+              <div className="row"><span className="nm grow">{t.title}</span>{t.attention > 0 && <StatusPill cls="warn" icon="alert">{t.attention}</StatusPill>}</div>
               <div className="muted small">{t.kind === 'episode' ? `${t.seasons?.length || 0} season${(t.seasons?.length || 0) === 1 ? '' : 's'} · ` : ''}{t.files} file{t.files === 1 ? '' : 's'}{t.pinned ? ` · ${t.pinned} pinned` : ''}</div>
               <div className="row wrap mt-sm">{t.langs.map(l => <Lang key={l} lang={l} />)}<span className="spacer" />{t.last_at && <span className="muted small">checked {ago(t.last_at)}</span>}</div>
             </Link>
@@ -70,14 +71,14 @@ export function TitlePage() {
   }
   return (
     <>
-      <PageHeader title={title} sub={<><Link to="/library">← Library</Link> · {data.items.length} subtitle files</>}
-        actions={!isShow && data.items.length > 0 && <><button className="btn" onClick={() => setTool({ season: 0, mode: 'verify' })}>Verify</button><button className="btn" onClick={() => setTool({ season: 0, mode: 'resync' })}>Re-sync all</button></>} />
+      <PageHeader title={title} sub={<><Link to="/library" className="back-link"><Icon name="chevron-left" size={14} />Library</Link> · {data.items.length} subtitle files</>}
+        actions={!isShow && data.items.length > 0 && <><button type="button" className="btn" onClick={() => setTool({ season: 0, mode: 'verify' })}><Icon name="check-circle" size={15} />Verify</button><button type="button" className="btn" onClick={() => setTool({ season: 0, mode: 'resync' })}><Icon name="refresh" size={15} />Re-sync all</button></>} />
       {[...seasons.entries()].sort((a, b) => a[0] - b[0]).map(([season, files]) => (
         <Card key={season} className="mb" flush title={isShow ? (season ? `Season ${season}` : 'Other') : 'Files'}
           actions={isShow && season > 0 && <>
-            <button className="btn ghost sm" onClick={() => setTool({ season, mode: 'verify' })}>Verify</button>
-            <button className="btn ghost sm" onClick={() => setTool({ season, mode: 'resync' })}>Re-sync</button>
-            {user?.role === 'admin' && !!settings?.bazarr_via && <button className="btn ghost sm" onClick={() => setTool({ season, mode: 'reset' })}>Reset…</button>}
+            <button type="button" className="btn ghost sm" onClick={() => setTool({ season, mode: 'verify' })}>Verify</button>
+            <button type="button" className="btn ghost sm" onClick={() => setTool({ season, mode: 'resync' })}>Re-sync</button>
+            {user?.role === 'admin' && !!settings?.bazarr_via && <button type="button" className="btn ghost sm" onClick={() => setTool({ season, mode: 'reset' })}>Reset…</button>}
           </>}>
           <table className="table files">
             <tbody>
@@ -107,8 +108,8 @@ function ResyncModal({ season, title, onClose, onStart }: { season: number; titl
   return (
     <Modal title={`Re-sync ${season ? `season ${season}` : title}`} onClose={onClose}>
       <p>Every file is unpinned and synced again from its current state, then verified independently. Use it after changing the reading lead or when a season feels off.</p>
-      <label className="row mt-sm"><input type="checkbox" checked={fresh} onChange={e => setFresh(e.target.checked)} style={{ width: 'auto' }} /> Rebuild the audio references first (slower; use when a measurement looks wrong)</label>
-      <div className="form-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={() => onStart(fresh)}>Re-sync</button></div>
+      <label className="check-row mt-sm"><input type="checkbox" checked={fresh} onChange={e => setFresh(e.target.checked)} /><span>Rebuild the audio references first (slower; use when a measurement looks wrong)</span></label>
+      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn primary" onClick={() => onStart(fresh)}>Re-sync</button></div>
     </Modal>
   )
 }
@@ -125,7 +126,7 @@ function ResetModal({ season, title, langs, onClose, onStart }: { season: number
         <li>verifies every file against the audio.</li>
       </ol>
       <p className="muted small">Anything no provider serves any more is put back from the backup. Takes roughly a minute per file.</p>
-      <div className="form-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn danger" onClick={onStart}>Reset season</button></div>
+      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn danger" onClick={onStart}>Reset season</button></div>
     </Modal>
   )
 }

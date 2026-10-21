@@ -5,8 +5,9 @@ import { usePoll } from '../lib/app-context'
 import type { Job, RunningJob, Task } from '../lib/types'
 import { ago, fmtDateTime, fmtElapsed, SOURCE_LABEL } from '../lib/format'
 import { Card, Empty, Loading, PageHeader, Tabs, useAsync, useToast } from '../components/ui'
-import { Decision, FileName, Progress } from '../components/bits'
+import { Decision, FileName, Progress, StatusPill } from '../components/bits'
 import { TaskSummary } from './Overview'
+import { Icon } from '../components/icons'
 
 const KIND: Record<string, string> = { sweep: 'Sweep', season_resync: 'Re-sync', season_verify: 'Verify', season_reset: 'Season reset', verify: 'Verify' }
 
@@ -46,9 +47,9 @@ function TaskList() {
 }
 
 function StateBadge({ s }: { s: string }) {
-  const m: Record<string, [string, string]> = { done: ['✓ done', 's-good'], failed: ['✕ failed', 's-crit'], cancelled: ['– cancelled', 's-mut'], running: ['● running', 's-info'] }
-  const [l, c] = m[s] || [s, 's-mut']
-  return <span className={`status ${c}`}>{l}</span>
+  const m: Record<string, [string, 'good' | 'crit' | 'mut' | 'info', string]> = { done: ['done', 'good', 'check'], failed: ['failed', 'crit', 'x'], cancelled: ['cancelled', 'mut', 'minus'], running: ['running', 'info', 'dot'] }
+  const [l, c, i] = m[s] || [s, 'mut', 'dot']
+  return <StatusPill cls={c} icon={i}>{l}</StatusPill>
 }
 
 function Queue() {
@@ -63,16 +64,16 @@ function Queue() {
         {!data.running.length ? <div className="empty-row">Nothing syncing right now</div> : (
           <ul className="rows">{data.running.map(j => (
             <li key={j.id} className="row-item"><div className="grow"><FileName f={j} /><div className="muted small"><span className="spinner sm" /> {j.stage} · {fmtElapsed(j.elapsed_s)}</div></div>
-              <button className="btn ghost sm" onClick={() => act(() => api.post(`${V1}/queue/${j.id}/cancel`), 'Cancelled')}>Cancel</button></li>
+              <button type="button" className="btn ghost sm" onClick={() => act(() => api.post(`${V1}/queue/${j.id}/cancel`), 'Cancelled')}>Cancel</button></li>
           ))}</ul>
         )}
       </Card>
-      <Card title={`Waiting (${data.total.toLocaleString()})`} flush actions={data.total > 0 && <button className="btn ghost sm danger-text" onClick={() => act(() => api.post(`${V1}/queue/clear`), 'Queue cleared')}>Clear all</button>}>
+      <Card title={`Waiting (${data.total.toLocaleString()})`} flush actions={data.total > 0 && <button type="button" className="btn ghost sm danger-text" onClick={() => act(() => api.post(`${V1}/queue/clear`), 'Queue cleared')}>Clear all</button>}>
         {!data.queued.length ? <div className="empty-row">Queue is empty</div> : (
           <ol className="rows numbered">{data.queued.map((j, i) => (
             <li key={j.id} className="row-item"><span className="num">{i + 1}</span><div className="grow"><FileName f={j} /></div><span className="badge">{SOURCE_LABEL[j.source] || j.source}</span>
-              <button className="btn ghost sm" title="Run next" onClick={() => act(() => api.post(`${V1}/queue/${j.id}/bump`), 'Moved to the front')}>↑</button>
-              <button className="btn ghost sm" title="Remove" onClick={() => act(() => api.post(`${V1}/queue/${j.id}/cancel`), 'Removed')}>✕</button></li>
+              <button type="button" className="btn ghost icon-only sm" title="Run next" aria-label="Run next" onClick={() => act(() => api.post(`${V1}/queue/${j.id}/bump`), 'Moved to the front')}><Icon name="arrow-up" size={15} /></button>
+              <button type="button" className="btn ghost icon-only sm" title="Remove" aria-label="Remove" onClick={() => act(() => api.post(`${V1}/queue/${j.id}/cancel`), 'Removed')}><Icon name="x" size={15} /></button></li>
           ))}</ol>
         )}
       </Card>
@@ -92,12 +93,12 @@ export function TaskPage() {
   const done = data.jobs.filter(j => j.state !== 'queued' && j.state !== 'running')
   return (
     <>
-      <PageHeader title={t.title} sub={<><Link to="/tasks">← Tasks</Link> · started {ago(t.created_at)}{t.finished_at && ` · finished ${ago(t.finished_at)}`}</>}
-        actions={t.state === 'running' && <button className="btn" onClick={cancel}>Stop</button>} />
+      <PageHeader title={t.title} sub={<><Link to="/tasks" className="back-link"><Icon name="chevron-left" size={14} />Tasks</Link> · started {ago(t.created_at)}{t.finished_at && ` · finished ${ago(t.finished_at)}`}</>}
+        actions={t.state === 'running' && <button type="button" className="btn" onClick={cancel}><Icon name="stop" size={14} />Stop</button>} />
       <div className="row wrap mb"><StateBadge s={t.state} />{t.state !== 'running' && <TaskSummary t={t} />}</div>
       {t.state === 'running' && t.total > 0 && <div className="mb"><Progress done={t.done} total={t.total} /><span className="muted small">{t.done} of {t.total}</span></div>}
       <div className="two-col">
-        <Card title="Log" flush><pre className="tasklog">{t.log || '…'}</pre></Card>
+        <Card title={<><Icon name="terminal" size={16} />Log</>} flush><pre className="tasklog">{t.log || '…'}</pre></Card>
         <Card title={`Files (${data.jobs.length})`} flush>
           {!data.jobs.length ? <div className="empty-row">This task queues no syncs.</div> : (
             <ul className="rows">{[...data.jobs.filter(j => j.state === 'running' || j.state === 'queued'), ...done].slice(0, 400).map(j => (

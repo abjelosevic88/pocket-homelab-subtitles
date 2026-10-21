@@ -6,6 +6,7 @@ import { ago, fmtDateTime } from '../lib/format'
 import { Card, Empty, Loading, PageHeader, Tabs, useAsync, useToast } from '../components/ui'
 import { Decision, FileName, Lang } from '../components/bits'
 import { RunModal } from './History'
+import { Icon } from '../components/icons'
 
 type Tab = 'attention' | 'rejected' | 'missing'
 
@@ -29,7 +30,7 @@ function Attention() {
   const navigate = useNavigate()
   const { data } = useAsync(() => api.get<{ items: Subtitle[]; total: number }>(`${V1}/library/files?status=attention&limit=1000`), [])
   if (!data) return <Loading />
-  if (!data.items.length) return <Card><Empty title="All clear">Every file's last run either synced it or confirmed it was already in sync.</Empty></Card>
+  if (!data.items.length) return <Card><Empty icon="check-circle" title="All clear">Every file's last run either synced it or confirmed it was already in sync.</Empty></Card>
   return (
     <Card flush>
       <p className="muted small pad" style={{ paddingBottom: 0 }}>The last run on these files did not end in sync. Open one to verify it, sync it again, pin it as it is, or nudge it by hand. Pinned files are not listed.</p>
@@ -82,7 +83,7 @@ function Missing() {
   const { toast } = useToast()
   const { data, error, reload } = useAsync(() => api.get<{ configured: boolean; items: WantedItem[]; episodes: number; movies: number; bazarr_url: string }>(`${V1}/issues/missing?limit=300`), [])
   const [busy, setBusy] = useState('')
-  if (error) return <div className="callout danger">{error}</div>
+  if (error) return <div className="callout danger"><Icon name="alert" size={15} /><span>{error}</span></div>
   if (!data) return <Loading />
   if (!data.configured) return <Card><Empty title="Bazarr is not connected">Add its URL and API key under Settings → Integrations to see which episodes and movies still have no subtitles.</Empty></Card>
   const search = async (it: WantedItem, lang: string) => {
@@ -91,7 +92,7 @@ function Missing() {
     try { await api.post(`${V1}/issues/missing/search`, { kind: it.kind, series_id: it.series_id, episode_id: it.episode_id, movie_id: it.movie_id, language: lang }); toast('Search started in Bazarr — a download syncs here on arrival'); setTimeout(reload, 4000) } catch (e) { toast((e as Error).message, 'err') } finally { setBusy('') }
   }
   return (
-    <Card flush title={`${(data.episodes + data.movies).toLocaleString()} without subtitles`} actions={<a className="btn ghost sm" href={`${data.bazarr_url}/wanted/series`} target="_blank" rel="noreferrer">Open Bazarr ↗</a>}>
+    <Card flush title={`${(data.episodes + data.movies).toLocaleString()} without subtitles`} actions={<a className="btn ghost sm" href={`${data.bazarr_url}/wanted/series`} target="_blank" rel="noreferrer">Open Bazarr<Icon name="external" size={13} /></a>}>
       {!data.items.length ? <Empty title="Nothing missing" /> : (
         <table className="table">
           <thead><tr><th>Title</th><th className="hide-sm">Episode</th><th>Missing</th></tr></thead>
@@ -101,7 +102,7 @@ function Missing() {
                 <td><b>{it.title}</b><div className="muted small show-sm">{it.detail}</div></td>
                 <td className="muted small hide-sm">{it.detail}</td>
                 <td><span className="row wrap">{(it.languages || []).map(l => (
-                  <button key={l} className="btn sm" disabled={busy !== ''} title="Search now" onClick={() => search(it, l)}><Lang lang={l} /> ⌕</button>
+                  <button type="button" key={l} className="btn sm" disabled={busy !== ''} title="Search now" onClick={() => search(it, l)}><Lang lang={l} /><Icon name="search" size={13} /></button>
                 ))}</span></td>
               </tr>
             ))}

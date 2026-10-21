@@ -1,7 +1,7 @@
 import type { User } from '../lib/types'
-import { colorFor, initials } from '../lib/format'
+import { colorFor } from '../lib/format'
+import { Avatar as Initials } from './ui'
 
-export function Avatar({ user, size = '' }: { user: User; size?: '' | 'lg' }) {
-  const name = user.name || user.email
-  return <span className={`avatar ${size}`} style={{ background: colorFor(user.id) }} title={name}>{initials(name)}</span>
+export function Avatar({ user, size = 24 }: { user: User; size?: number }) {
+  return <span title={user.name || user.email} className="avatar-wrap"><Initials name={user.name} email={user.email} size={size} color={colorFor(user.id)} /></span>
 }

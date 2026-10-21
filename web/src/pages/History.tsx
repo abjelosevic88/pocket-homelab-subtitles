@@ -6,6 +6,7 @@ import { fmtDateTime, fmtDuration, METHOD_LABEL, SOURCE_LABEL } from '../lib/for
 import { Card, Empty, Loading, Modal, PageHeader, Segmented, useAsync, useDebounce, useToast } from '../components/ui'
 import { Decision, FileName, Shift } from '../components/bits'
 import { Select } from '../components/Select'
+import { Icon } from '../components/icons'
 
 const OUTCOMES = [
   { value: '', label: 'All' }, { value: 'adjusted', label: 'Adjusted' }, { value: 'in_sync', label: 'In sync' },
@@ -31,7 +32,7 @@ export default function History() {
     <>
       <PageHeader title="History" sub={data ? `${data.total.toLocaleString()} runs` : ' '} />
       <div className="toolbar">
-        <div className="search"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search: show, movie, S01E02, file name…" /></div>
+        <div className="search"><Icon name="search" size={15} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search: show, movie, S01E02, file name…" /></div>
         <Select value={source} onChange={v => set('source', v)} ariaLabel="Source" options={[{ value: '', label: 'Every source' }, ...Object.entries(SOURCE_LABEL).map(([value, label]) => ({ value, label }))]} />
         <Select value={lang} onChange={v => set('lang', v)} ariaLabel="Language" options={[{ value: '', label: 'Every language' }, ...(langs.data || []).map(l => ({ value: l, label: l.toUpperCase() }))]} />
       </div>
@@ -56,9 +57,9 @@ export default function History() {
       </Card>
       {data && data.total > PAGE && (
         <div className="pager">
-          <button className="btn sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Newer</button>
+          <button type="button" className="btn sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}><Icon name="chevron-left" size={14} />Newer</button>
           <span className="muted small">{page * PAGE + 1}–{Math.min(data.total, (page + 1) * PAGE)} of {data.total.toLocaleString()}</span>
-          <button className="btn sm" disabled={(page + 1) * PAGE >= data.total} onClick={() => setPage(p => p + 1)}>Older →</button>
+          <button type="button" className="btn sm" disabled={(page + 1) * PAGE >= data.total} onClick={() => setPage(p => p + 1)}>Older<Icon name="chevron-right" size={14} /></button>
         </div>
       )}
       {open && <RunModal id={open} onClose={() => setOpen(null)} />}
@@ -92,7 +93,7 @@ export function RunModal({ id, onClose }: { id: number; onClose: () => void }) {
         </tbody>
       </table>
       {segs.length > 0 && <SegmentStrip segs={segs} />}
-      {typeof d.quarantine === 'string' && <div className="form-actions"><button className="btn" onClick={restore}>Put this file back (and pin it)</button></div>}
+      {typeof d.quarantine === 'string' && <div className="form-actions"><button type="button" className="btn" onClick={restore}><Icon name="undo" size={15} />Put this file back (and pin it)</button></div>}
       <details className="mt"><summary className="muted small">Raw engine output</summary><pre>{JSON.stringify(d, null, 2)}</pre></details>
     </Modal>
   )

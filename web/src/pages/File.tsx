@@ -5,9 +5,11 @@ import { usePoll } from '../lib/app-context'
 import type { FileDetail, Task } from '../lib/types'
 import { ago, fileTitle, fmtDateTime, METHOD_LABEL, SOURCE_LABEL } from '../lib/format'
 import { Card, Confirm, Loading, PageHeader, useAsync, useToast } from '../components/ui'
-import { Decision, Lang, Pin, Shift } from '../components/bits'
+import { Decision, Lang, Pin, Shift, StatusPill } from '../components/bits'
 import { NudgePanel } from '../components/NudgePanel'
 import { RunModal } from './History'
+import { Icon } from '../components/icons'
+import { announceChange } from '../lib/events'
 
 const EVENT_LABEL: Record<string, string> = { nudge: 'Nudged', undo: 'Nudge undone', pin: 'Pinned', unpin: 'Unpinned', restore: 'Restored', verify: 'Verified', reject: 'Rejected', quarantine: 'Quarantined', rename: 'Renamed' }
 
@@ -23,7 +25,7 @@ export default function FilePage() {
   usePoll(poll, 3000, [poll])
   if (error) return <div className="callout danger">{error}</div>
   if (!data) return <Loading />
-  const act = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); toast(msg); reload() } catch (e) { toast((e as Error).message, 'err') } }
+  const act = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); toast(msg); announceChange(); reload() } catch (e) { toast((e as Error).message, 'err') } }
   const sync = (unpin = false) => act(() => api.post(`${V1}/files/${id}/sync`, { unpin }), 'Queued — it runs next')
   const verify = async () => { try { const t = await api.post<Task>(`${V1}/files/${id}/verify`); toast('Checking against the audio…'); navigate(`/tasks/${t.id}`) } catch (e) { toast((e as Error).message, 'err') } }
   const timeline = [
@@ -34,16 +36,16 @@ export default function FilePage() {
   return (
     <>
       <PageHeader title={<span className="row wrap">{fileTitle(data)} <Lang lang={data.lang} flags={data.flags} /></span>}
-        sub={<><Link to={`/library/t/${encodeURIComponent(data.title)}`}>← {data.title}</Link> · <span className="mono small break">{data.rel}</span></>}
+        sub={<><Link to={`/library/t/${encodeURIComponent(data.title)}`} className="back-link"><Icon name="chevron-left" size={14} />{data.title}</Link> · <span className="mono small break">{data.rel}</span></>}
         actions={<>
-          <button className="btn" onClick={verify} disabled={!data.exists}>Verify</button>
-          <button className="btn primary" disabled={!data.exists || !!data.queued} onClick={() => data.pinned ? setConfirm('sync-pinned') : sync()}>{data.queued ? (data.queued.state === 'running' ? 'Syncing…' : 'Queued') : 'Sync now'}</button>
+          <button type="button" className="btn" onClick={verify} disabled={!data.exists}><Icon name="check-circle" size={15} />Verify</button>
+          <button type="button" className="btn primary" disabled={!data.exists || !!data.queued} onClick={() => data.pinned ? setConfirm('sync-pinned') : sync()}>{data.queued ? (data.queued.state === 'running' ? 'Syncing…' : 'Queued') : 'Sync now'}</button>
         </>} />
-      {!data.exists && <div className="callout danger mb">This file is no longer in the library{data.last_decision.startsWith('rejected') ? ' — it was rejected; see the run below to put it back' : ''}.</div>}
-      {data.queued && <div className="callout mb"><span className="spinner sm" /> {data.queued.state === 'running' ? `Syncing: ${data.queued.stage || 'starting'}` : 'Waiting in the queue'}</div>}
+      {!data.exists && <div className="callout danger mb"><Icon name="alert" size={15} /><span>This file is no longer in the library{data.last_decision.startsWith('rejected') ? ' — it was rejected; see the run below to put it back' : ''}.</span></div>}
+      {data.queued && <div className="callout info mb"><span className="spinner sm" /><span>{data.queued.state === 'running' ? `Syncing: ${data.queued.stage || 'starting'}` : 'Waiting in the queue'}</span></div>}
       <div className="two-col">
         <div className="grid" style={{ gap: 16 }}>
-          <Card title="Current state">
+          <Card title={<><Icon name="captions" size={16} />Current state</>}>
             <div className="row wrap mb-sm"><Decision d={data.last_decision} size="lg" /><Shift s={data.last_shift} decision={data.last_decision} /><Pin on={data.pinned} note={data.pin_note} /></div>
             {data.last_reason && <p className="small">{data.last_reason}</p>}
             <table className="table compact kv">
@@ -55,24 +57,24 @@ export default function FilePage() {
               </tbody>
             </table>
             <div className="row wrap mt">
-              {data.pinned ? <button className="btn sm" onClick={() => act(() => api.post(`${V1}/files/${id}/unpin`), 'Unpinned')}>Unpin</button>
-                : <button className="btn sm" onClick={() => act(() => api.post(`${V1}/files/${id}/pin`, { note: 'pinned by hand' }), 'Pinned — no automatic run will touch it')}>📌 Pin as it is</button>}
-              {data.has_original && <button className="btn sm" onClick={() => setConfirm('restore')}>Restore original download</button>}
-              <button className="btn sm ghost" onClick={async () => setPreview(preview === null ? await api.getText(`${V1}/files/${id}/text`) : null)}>{preview === null ? 'Show text' : 'Hide text'}</button>
+              {data.pinned ? <button type="button" className="btn sm" onClick={() => act(() => api.post(`${V1}/files/${id}/unpin`), 'Unpinned')}>Unpin</button>
+                : <button type="button" className="btn sm" onClick={() => act(() => api.post(`${V1}/files/${id}/pin`, { note: 'pinned by hand' }), 'Pinned — no automatic run will touch it')}><Icon name="pushpin" size={14} />Pin as it is</button>}
+              {data.has_original && <button type="button" className="btn sm" onClick={() => setConfirm('restore')}><Icon name="undo" size={14} />Restore original download</button>}
+              <button type="button" className="btn sm ghost" onClick={async () => setPreview(preview === null ? await api.getText(`${V1}/files/${id}/text`) : null)}>{preview === null ? 'Show text' : 'Hide text'}</button>
             </div>
           </Card>
           {v && (
-            <Card title="Independent check">
-              <div className="row wrap mb-sm">{v.ok ? <span className="status s-good">✓ In sync with the audio</span> : <span className="status s-warn">⚠ {v.problems.join('; ')}</span>}{data.verified_at && <span className="muted small">{ago(data.verified_at)}</span>}</div>
+            <Card title={<><Icon name="shield" size={16} />Independent check</>}>
+              <div className="row wrap mb-sm">{v.ok ? <StatusPill cls="good" icon="check">In sync with the audio</StatusPill> : <StatusPill cls="warn" icon="alert">{v.problems.join('; ')}</StatusPill>}{data.verified_at && <span className="muted small">{ago(data.verified_at)}</span>}</div>
               <p className="small muted">Whole-file offset against the audio: <b className="mono">{v.offset === null ? 'unmeasurable' : `${v.offset > 0 ? '+' : ''}${v.offset.toFixed(2)} s`}</b> (target {v.target.toFixed(2)} s ± {v.tolerance.toFixed(1)} s).</p>
               {v.tracks?.length > 0 && <p className="small muted">Embedded tracks: {v.tracks.map(t => `#${t.track} ${t.ok ? 'trusted' : 'rejected'}${t.offset !== null ? ` (${t.offset.toFixed(2)} s)` : ''}`).join(' · ')}</p>}
             </Card>
           )}
-          {preview !== null && <Card title="Text" flush><pre className="srt-preview">{preview.slice(0, 20000)}</pre></Card>}
+          {preview !== null && <Card title={<><Icon name="text" size={16} />Text</>} flush><pre className="srt-preview">{preview.slice(0, 20000)}</pre></Card>}
         </div>
         <div className="grid" style={{ gap: 16 }}>
-          <Card title="Nudge by hand"><NudgePanel file={data} onChange={reload} /></Card>
-          <Card title="Timeline" flush>
+          <Card title={<><Icon name="nudge" size={16} />Nudge by hand</>}><NudgePanel file={data} onChange={reload} /></Card>
+          <Card title={<><Icon name="clock" size={16} />Timeline</>} flush>
             {timeline.length === 0 ? <div className="empty-row">Nothing yet</div> : (
               <ul className="rows">
                 {timeline.map(t => t.kind === 'run' ? (

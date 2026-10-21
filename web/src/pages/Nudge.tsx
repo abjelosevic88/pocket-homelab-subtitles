@@ -6,6 +6,7 @@ import { ago, fileTitle, fmtMs } from '../lib/format'
 import { Card, Empty, Loading, PageHeader, useAsync, useDebounce } from '../components/ui'
 import { Lang, Pin } from '../components/bits'
 import { NudgePanel } from '../components/NudgePanel'
+import { Icon } from '../components/icons'
 
 /** The quick tool: find a file, move it by some milliseconds. */
 export default function Nudge() {
@@ -22,7 +23,7 @@ export default function Nudge() {
       <PageHeader title="Nudge a subtitle" sub="Move every cue of one file by a few milliseconds. Negative = appears earlier, positive = later. The file is pinned so the nightly sweep keeps your timing." />
       <div className="nudge-layout">
         <div className="grid" style={{ gap: 12, alignContent: 'start' }}>
-          <div className="search big"><span className="ico">⌕</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. walking dead s05e01 sr" autoFocus /></div>
+          <div className="search big"><Icon name="search" size={17} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. walking dead s05e01 sr" autoFocus /></div>
           <Card flush>
             {list.loading && !list.data ? <Loading /> : !list.data?.items.length ? <Empty title="No match" /> : (
               <ul className="rows pick">
@@ -41,13 +42,13 @@ export default function Nudge() {
         </div>
         <div className="grid" style={{ gap: 16, alignContent: 'start' }}>
           {file.data ? (
-            <Card title={<span className="row wrap">{fileTitle(file.data)} <Lang lang={file.data.lang} flags={file.data.flags} /></span>} actions={<Link className="btn ghost sm" to={`/files/${file.data.id}`}>Details →</Link>}>
+            <Card title={<span className="row wrap">{fileTitle(file.data)} <Lang lang={file.data.lang} flags={file.data.flags} /></span>} actions={<Link className="btn ghost sm" to={`/files/${file.data.id}`}>Details<Icon name="arrow-right" size={14} /></Link>}>
               <p className="mono small muted break" style={{ marginTop: 0 }}>{file.data.rel}</p>
               <NudgePanel file={file.data} onChange={reload} />
               <p className="muted small mt">Jellyfin is told about the change right away; restart playback to load the new timing.</p>
             </Card>
-          ) : <Card><Empty title="Pick a file">Search on the left, then shift it here.</Empty></Card>}
-          <Card title="Recent nudges" flush>
+          ) : <Card><Empty icon="nudge" title="Pick a file">Search on the left, then shift it here.</Empty></Card>}
+          <Card title={<><Icon name="clock" size={16} />Recent nudges</>} flush>
             {!recent.data?.length ? <div className="empty-row">None yet</div> : (
               <ul className="rows">
                 {recent.data.slice(0, 12).map(n => (
