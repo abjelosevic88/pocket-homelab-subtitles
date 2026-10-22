@@ -11,6 +11,7 @@ import { CommandPalette, type PaletteCommand } from './CommandPalette'
 import { ShortcutsSheet } from './ShortcutsSheet'
 import { Avatar } from './people'
 import { type MenuItem, MenuButton, modalOpen, useIsMobile, useMediaQuery, useToast } from './ui'
+import { AskButton } from './AskButton'
 
 const SIDEBAR_KEY = 'ps-sidebar'
 
@@ -140,6 +141,7 @@ function TopBar({ onMenu, onPalette, mobile, compact, sidebarOpen }: { onMenu: (
       </h1>
       <span className="spacer" />
       <button type="button" className="btn ghost icon-only" onClick={onPalette} aria-label="Search" title="Search (⌘K or /)"><Icon name="search" size={18} /></button>
+      {mobile && <AskButton />}
       <MenuButton label="Account" className="avatar-btn" align="right" width={220} items={avatarMenu}>
         {user && <Avatar user={user} size={30} />}
       </MenuButton>
