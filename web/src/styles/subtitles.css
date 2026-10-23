@@ -271,3 +271,9 @@ a.stat:hover { border-color: var(--border-strong); box-shadow: var(--shadow); te
   input[type="date"], input[type="time"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; display: block; }
   input::-webkit-date-and-time-value { text-align: left; }
 }
+
+/* a Pocket Core choice on a box without a Core: visible, greyed out, explained */
+.segmented button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.segmented button[aria-disabled="true"]:hover { color: var(--muted); }
+.core-hint { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.core-hint a { color: inherit; text-decoration: underline; }

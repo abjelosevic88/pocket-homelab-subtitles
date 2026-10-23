@@ -198,15 +198,22 @@ const connBadge = (mode: ConnMode, via?: string) => mode === 'off' ? <span class
   : via ? <span className="badge ok">{via === 'core' ? 'Pocket Core' : 'direct'}</span>
   : <span className="badge warn">not connected</span>
 
+/** Why a Pocket Core choice is greyed out on a box without a Core. */
+export function CoreHint() {
+  return <p className="core-hint">Needs Pocket Core. Pocket Core connects your Pocket apps to each other and to your services: one sign-in for everyone, each person's own accounts, nothing to copy or paste. Set CORE_URL to connect this app. <a href="https://github.com/abjelosevic88/pocket-homelab-core" target="_blank" rel="noreferrer">Learn more</a></p>
+}
+
 /** Pocket Core | Off for Bazarr or Jellyfin, with Direct as an advanced option when the
  * box has a Pocket Core (always shown while it is the current mode, and shown normally
- * without a Core); the switch saves at once. */
+ * without a Core); the switch saves at once. Without a Core the Pocket Core choice stays
+ * visible but greyed out, and a saved "core" shows as Off (nothing is connected). */
 function Connection({ app, mode, via, source, detail, as, core, disabled, onMode, onDisconnect, hasKey, test, direct }: {
   app: string; mode: ConnMode; via?: string; source?: string; detail?: string; as?: string; core: boolean; disabled: boolean
   onMode: (m: ConnMode) => void; onDisconnect: () => void; hasKey: boolean; test: React.ReactNode; direct: React.ReactNode
 }) {
   const [advanced, setAdvanced] = useState(false)
   const showDirect = !core || mode === 'direct' || advanced
+  const shown: ConnMode = !core && mode === 'core' ? 'off' : mode
   const ok = !!via
   const whose = source === 'personal' ? " (the admin's own key)" : source === 'box' ? " (the box's key)" : ''
   const line = mode === 'off' ? `Off: Pocket Subtitles does not talk to ${app}.`
@@ -214,19 +221,20 @@ function Connection({ app, mode, via, source, detail, as, core, disabled, onMode
     : (ok ? `Direct connection with the URL and API key below.` : `Not connected: ${detail || 'add the URL and an API key'}.`)
   return (
     <div className="conn-block">
-      <div className="conn-mode"><Segmented size="sm" value={mode} onChange={m => !disabled && onMode(m)} label={`${app} connection`} options={[
-        { value: 'core' as const, label: 'Pocket Core', title: core ? `Through Pocket Core, as the admin ${as || ''}` : 'There is no Pocket Core on this box' },
+      <div className="conn-mode"><Segmented size="sm" value={shown} onChange={m => !disabled && onMode(m)} label={`${app} connection`} options={[
+        { value: 'core' as const, label: 'Pocket Core', title: core ? `Through Pocket Core, as the admin ${as || ''}` : 'Needs Pocket Core', disabled: !core },
         { value: 'direct' as const, label: 'Direct', title: 'A URL and API key saved here' },
         { value: 'off' as const, label: 'Off' },
       ].filter(o => o.value !== 'direct' || showDirect)} />
         {!showDirect && !disabled && <button type="button" className="conn-advanced" onClick={() => setAdvanced(true)}>Advanced: connect directly with a URL and key</button>}
       </div>
-      <div className={`conn-status ${mode === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{line}</div>
+      {!core && <CoreHint />}
+      <div className={`conn-status ${shown === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{shown !== mode ? `Off: Pocket Subtitles does not talk to ${app}. It was set to go through Pocket Core, and this box has none; pick Direct to connect with a URL and key.` : line}</div>
       {mode === 'direct' && <>
         <div className="set-app-direct">{direct}</div>
         <div className="row">{test}{hasKey && !disabled && <button type="button" className="btn ghost sm danger-text" onClick={onDisconnect} title="Remove the saved URL and API key">Disconnect</button>}</div>
       </>}
-      {mode === 'core' && <div className="row">{test}</div>}
+      {shown === 'core' && <div className="row">{test}</div>}
     </div>
   )
 }

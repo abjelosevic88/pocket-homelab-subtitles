@@ -126,10 +126,10 @@ export function SettingRow({ title, help, children, stack }: { title: React.Reac
   )
 }
 
-export function Segmented<T extends string | number>({ options, value, onChange, size = '', className = '', label }: { options: { value: T; label: React.ReactNode; title?: string }[]; value: T | null; onChange: (v: T) => void; size?: '' | 'sm'; className?: string; label?: string }) {
+export function Segmented<T extends string | number>({ options, value, onChange, size = '', className = '', label }: { options: { value: T; label: React.ReactNode; title?: string; disabled?: boolean }[]; value: T | null; onChange: (v: T) => void; size?: '' | 'sm'; className?: string; label?: string }) {
   return (
     <div className={`segmented ${size} ${className}`} role="radiogroup" aria-label={label}>
-      {options.map(o => <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} title={o.title} className={o.value === value ? 'active' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}
+      {options.map(o => <button key={String(o.value)} type="button" role="radio" aria-checked={o.value === value} aria-disabled={o.disabled || undefined} title={o.title} className={o.value === value ? 'active' : ''} onClick={() => !o.disabled && onChange(o.value)}>{o.label}</button>)}
     </div>
   )
 }
