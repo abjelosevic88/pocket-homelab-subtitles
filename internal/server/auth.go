@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -35,6 +36,10 @@ func actorID(ctx context.Context) int64 {
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, err := s.resolveUser(r)
+		if errors.Is(err, errLinkScope) {
+			writeErr(w, http.StatusForbidden, "this Pocket Core link does not cover "+r.Method+" "+r.URL.Path)
+			return
+		}
 		if err != nil || u == nil {
 			writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -52,6 +57,9 @@ func (s *Server) resolveUser(r *http.Request) (*store.User, error) {
 		tok = t
 	}
 	if tok != "" {
+		if s.core.Configured() && core.IsLinkToken(tok) {
+			return s.linkUser(ctx, tok, r)
+		}
 		if s.core.Configured() && core.IsCoreToken(tok) {
 			return s.coreUser(ctx, tok)
 		}

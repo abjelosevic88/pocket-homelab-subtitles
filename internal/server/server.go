@@ -401,6 +401,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "SUBSYNC",
 		Publishes: []string{"subtitles.synced", "subtitles.failed", "subtitles.nudged"},
+		Offers:    linkOffers,
 		Services:  services.Uses,
 	}
 	if s.cfg.BaseURL != "" {

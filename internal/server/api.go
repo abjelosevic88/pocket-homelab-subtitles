@@ -338,13 +338,26 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleFileByPath finds a subtitle by its path here or as Jellyfin sees it
+// (JELLYFIN_PATH_MAP), adding a file of the library seen for the first time.
 func (s *Server) handleFileByPath(w http.ResponseWriter, r *http.Request) {
-	sub, err := s.store.GetSubtitleByPath(r.Context(), r.URL.Query().Get("path"))
+	ctx := r.Context()
+	p := r.URL.Query().Get("path")
+	sub, err := s.store.GetSubtitleByPath(ctx, p)
+	if errors.Is(err, store.ErrNotFound) {
+		if st, serr := s.store.GetSettings(ctx); serr == nil && st.JellyfinPathMap != "" {
+			p = bazarr.ParsePathMap(st.JellyfinPathMap).ToBazarr(p)
+		}
+		sub, err = s.w.Resolve(ctx, p)
+		if errors.Is(err, worker.ErrOutsideLibrary) {
+			err = store.ErrNotFound
+		}
+	}
 	if err != nil {
 		s.fail(w, err, "file")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.fileDetail(r.Context(), sub))
+	writeJSON(w, http.StatusOK, s.fileDetail(ctx, sub))
 }
 
 // handleFileText returns the subtitle text (first 200 KB) for the preview.
