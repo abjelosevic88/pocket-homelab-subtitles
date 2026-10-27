@@ -27,7 +27,7 @@ export function Sidebar({ onNavigate, live }: { onNavigate: () => void; live: Ov
       <div className="sb-brand">
         <img src="/favicon.svg" alt="" className="sb-logo" />
         <span className="sb-title">{title !== 'Pocket Subtitles' ? title : <>Pocket <b>Subtitles</b></>}</span>
-        {status?.version && <span className="sb-version" title={`Version ${status.version}`}>{/^\d/.test(status.version) ? 'v' + status.version : status.version}</span>}
+        {status?.version && <span className="sb-version" title={`Version ${status.version}`}>{/^v?\d+\.\d+/.test(status.version) ? 'v' + status.version.replace(/^v/, '').replace(/[-+].*$/, '') : status.version}</span>}
       </div>
       <button type="button" className="btn primary create-btn" onClick={() => { onNavigate(); navigate('/nudge') }}>
         <Icon name="nudge" size={17} strokeWidth={2.2} />Nudge a file<kbd className="kbd-on-primary">N</kbd>
