@@ -142,6 +142,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if s.core.Configured() {
 		go s.coreLoop(ctx)
 	}
+	if s.cfg.BazarrConfigFile != "" {
+		go s.adoptBazarrKey(ctx)
+	}
 	return nil
 }
 

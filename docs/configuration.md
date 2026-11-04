@@ -36,6 +36,7 @@ Two layers:
 | `TRUST_PROXY` | `true` | Use `X-Forwarded-For` for client addresses. |
 | `METRICS_ENABLED` | `true` | Prometheus text at `/metrics`. |
 | `LEGACY_API` | `off` | `open` / `token`: serve `GET /` (JSON for non-browser clients), `GET /nudge/files`, `POST /nudge/{apply,undo,unpin}` like the old sync-status-server. |
+| `BAZARR_CONFIG_FILE` | – | The config.yaml of the Bazarr that comes with the sample compose file (its `bazarr` profile), mounted read-only; the API key is taken from it once it appears |
 | `BAZARR_URL`, `BAZARR_API_KEY`, `BAZARR_PATH_MAP` | – | Seed Settings → Integrations → Bazarr (Direct), once. `BAZARR_API_KEY_FILE` reads a file. Not needed on a box with Pocket Core (see below). |
 | `JELLYFIN_URL`, `JELLYFIN_API_KEY`, `JELLYFIN_PATH_MAP` | – | Seed Settings → Integrations → Jellyfin (Direct), once. Not needed on a box with Pocket Core. |
 | `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://git.bjelke.org/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the minted app token lives in `$DATA_DIR/core.token`), publish `subtitles.synced` / `subtitles.failed` / `subtitles.nudged`, and accept the tokens Core hands to paired phones |

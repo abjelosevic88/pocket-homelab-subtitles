@@ -73,13 +73,22 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 
 ## Run it
 
+With Pocket Core: **Apps → Install app → Pocket Subtitles** (it brings Bazarr along). Or with Docker Compose:
+
 ```bash
 mkdir pocket-subtitles && cd pocket-subtitles
 curl -fsSLO https://raw.githubusercontent.com/abjelosevic88/pocket-homelab-subtitles/main/docker-compose.yml
-# edit the media volume: mount your library at the same path Bazarr sees it (e.g. /media)
-docker compose up -d
+curl -fsSL -o .env https://raw.githubusercontent.com/abjelosevic88/pocket-homelab-subtitles/main/.env.example
+# set MEDIA_FOLDER in .env to your library (shows/ and movies/ inside)
+docker compose up -d     # .env has COMPOSE_PROFILES=bazarr: the app and Bazarr start together
 # open http://localhost:8080 and create your account
 ```
+
+**Bazarr included, or bring your own.** With the `bazarr` profile, Bazarr runs next to the app over the same media
+folder at the same `/media` paths, and Pocket Subtitles takes Bazarr's API key from its config by itself. Bazarr still
+needs setting up once on its own page (port 6767): connect Sonarr and Radarr, pick languages and subtitle providers.
+Already run Bazarr? Drop `COMPOSE_PROFILES` from `.env`, set `BAZARR_URL`, and mount your library at the same path
+Bazarr sees it.
 
 Then **connect Bazarr** (Settings → Integrations shows the exact command with a token filled in):
 
@@ -103,7 +112,8 @@ Runtime behaviour (reading lead, gates, schedule, integrations, notifications) i
 | `AUTH_MODE` | `local` | `local`, `proxy` (trust `Remote-User`), or `none` (trusted LAN only). |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | – | Create the first admin without the setup screen. |
 | `SECURE_COOKIES` | `false` | `true` behind HTTPS. |
-| `BAZARR_URL` / `BAZARR_API_KEY` | – | Seed the Bazarr integration once (also settable in the UI; not needed with Pocket Core). `*_FILE` variants read Docker secrets. |
+| `BAZARR_URL` / `BAZARR_API_KEY` | – (`http://bazarr:6767` in the sample compose file) | Seed the Bazarr integration once (also settable in the UI; not needed with Pocket Core). `*_FILE` variants read Docker secrets. |
+| `BAZARR_CONFIG_FILE` | – (`/bazarr/config/config.yaml` in the sample) | The included Bazarr's config.yaml, mounted read-only: its API key is taken from there once it appears (a Disconnect is not undone). |
 | `JELLYFIN_URL` / `JELLYFIN_API_KEY` / `JELLYFIN_PATH_MAP` | – | Seed the Jellyfin integration once. |
 | `WORKERS` | `1` | Files synced in parallel. Each decodes a whole video's audio. |
 | `NICE` | `19` | CPU priority of the engine — playback and transcoding win. |

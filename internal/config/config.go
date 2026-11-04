@@ -66,12 +66,15 @@ type Config struct {
 	OIDCAutoCreate   bool   // unknown emails get a member account
 
 	// Seeds for the integration settings (first start only).
-	BazarrURL       string
-	BazarrAPIKey    string
-	BazarrPathMap   string
-	JellyfinURL     string
-	JellyfinAPIKey  string
-	JellyfinPathMap string
+	BazarrURL     string
+	BazarrAPIKey  string
+	BazarrPathMap string
+	// BazarrConfigFile is the config.yaml of the Bazarr that came with Pocket
+	// Subtitles (mounted read-only): its API key is taken from there once.
+	BazarrConfigFile string
+	JellyfinURL      string
+	JellyfinAPIKey   string
+	JellyfinPathMap  string
 
 	// Pocket Core: when CORE_URL is set the app registers itself on start,
 	// publishes events and accepts the tokens Core hands to paired phones.
@@ -173,12 +176,13 @@ func Load() (*Config, error) {
 		OIDCName:             env("OIDC_NAME", "single sign-on"),
 		OIDCAutoCreate:       envBool("OIDC_AUTO_CREATE", true),
 
-		BazarrURL:       strings.TrimRight(env("BAZARR_URL", ""), "/"),
-		BazarrAPIKey:    envSecret("BAZARR_API_KEY"),
-		BazarrPathMap:   env("BAZARR_PATH_MAP", ""),
-		JellyfinURL:     strings.TrimRight(env("JELLYFIN_URL", ""), "/"),
-		JellyfinAPIKey:  envSecret("JELLYFIN_API_KEY"),
-		JellyfinPathMap: env("JELLYFIN_PATH_MAP", ""),
+		BazarrURL:        strings.TrimRight(env("BAZARR_URL", ""), "/"),
+		BazarrAPIKey:     envSecret("BAZARR_API_KEY"),
+		BazarrPathMap:    env("BAZARR_PATH_MAP", ""),
+		BazarrConfigFile: env("BAZARR_CONFIG_FILE", ""),
+		JellyfinURL:      strings.TrimRight(env("JELLYFIN_URL", ""), "/"),
+		JellyfinAPIKey:   envSecret("JELLYFIN_API_KEY"),
+		JellyfinPathMap:  env("JELLYFIN_PATH_MAP", ""),
 
 		CoreURL:             strings.TrimRight(env("CORE_URL", ""), "/"),
 		CoreRegistrationKey: env("CORE_REGISTRATION_KEY", ""),
