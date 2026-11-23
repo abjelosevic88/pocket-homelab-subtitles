@@ -136,14 +136,14 @@ type Nudge struct {
 type Event struct {
 	ID        int64  `json:"id"`
 	Path      string `json:"path"`
-	Kind      string `json:"kind"` // nudge | undo | pin | unpin | restore | verify | rename | reject | quarantine
+	Kind      string `json:"kind"` // nudge | undo | pin | unpin | restore | verify | rename | reject | quarantine | review
 	Detail    string `json:"detail"`
 	UserID    *int64 `json:"user_id"`
 	CreatedAt string `json:"created_at"`
 }
 
 // Decisions that mean "a person should look at this file".
-var AttentionDecisions = []string{"left_unchanged", "error", "timeout", "rejected_wrong_content", "rejected_machine_translation"}
+var AttentionDecisions = []string{"left_unchanged", "error", "timeout", "rejected_wrong_content", "rejected_machine_translation", "kept_for_review"}
 
 // Decisions that mean the engine never got to answer; worth another go.
 var RetryableDecisions = []string{"error", "timeout"}

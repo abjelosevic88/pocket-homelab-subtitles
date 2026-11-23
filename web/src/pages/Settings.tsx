@@ -157,7 +157,7 @@ function Sync() {
         </SettingRow>
       </Section>
       <Section title="Quality gates" icon="shield">
-        <SettingRow title="Reject subtitles whose text belongs to another video" help="After alignment the cues must actually sit on detected speech — a subtitle for the wrong episode can measure perfectly in sync.">
+        <SettingRow title="Reject subtitles whose text belongs to another video" help="After alignment the cues must lock onto the detected speech — a subtitle for the wrong episode can measure perfectly in sync. After two rejected downloads in a row for the same file, the next one is synced and kept for review instead, so Bazarr never loops.">
           <Switch checked={f.content_gate} onChange={v => set('content_gate', v)} disabled={d} label="Reject wrong content" />
         </SettingRow>
         <SettingRow title="Reject machine translations of fresh downloads in" help="Language codes, comma separated. The heuristic (no translator credit, many fragment cues, short lines, no dialogue dashes) is tuned on Serbian, Croatian and Bosnian.">

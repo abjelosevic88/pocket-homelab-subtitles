@@ -11,7 +11,7 @@ import { RunModal } from './History'
 import { Icon } from '../components/icons'
 import { announceChange } from '../lib/events'
 
-const EVENT_LABEL: Record<string, string> = { nudge: 'Nudged', undo: 'Nudge undone', pin: 'Pinned', unpin: 'Unpinned', restore: 'Restored', verify: 'Verified', reject: 'Rejected', quarantine: 'Quarantined', rename: 'Renamed' }
+const EVENT_LABEL: Record<string, string> = { nudge: 'Nudged', undo: 'Nudge undone', pin: 'Pinned', unpin: 'Unpinned', restore: 'Restored', verify: 'Verified', reject: 'Rejected', quarantine: 'Quarantined', rename: 'Renamed', review: 'Kept for review' }
 
 export default function FilePage() {
   const { id } = useParams()

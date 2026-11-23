@@ -319,6 +319,8 @@ func DecisionLabel(d string) string {
 		return "gave up"
 	case "rejected_wrong_content":
 		return "rejected (wrong content)"
+	case "kept_for_review":
+		return "kept for review"
 	case "rejected_machine_translation":
 		return "rejected (machine translation)"
 	}

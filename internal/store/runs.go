@@ -84,7 +84,7 @@ func (s *Store) ListRuns(ctx context.Context, f RunFilter) ([]Run, int, error) {
 	case "in_sync":
 		w = append(w, `decision = 'already_in_sync'`)
 	case "attention":
-		w = append(w, `decision IN ('left_unchanged','error','timeout')`)
+		w = append(w, `decision IN ('left_unchanged','error','timeout','kept_for_review')`)
 	case "rejected":
 		w = append(w, `decision LIKE 'rejected_%'`)
 	case "pinned":
@@ -250,3 +250,38 @@ func (s *Store) LinkRuns(ctx context.Context) (int64, error) {
 }
 
 var _ = sql.ErrNoRows
+
+// WrongContentStreak counts how many runs in a row (newest first, last 30
+// days) failed the content check for this file - rejected, or kept for review
+// by the circuit breaker. Runs that never reached a verdict do not break it.
+func (s *Store) WrongContentStreak(ctx context.Context, path string) (int, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT decision FROM runs WHERE path = ? AND created_at >= ?
+		ORDER BY created_at DESC, id DESC LIMIT 50`, path, TimeString(time.Now().AddDate(0, 0, -30)))
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	var ds []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return 0, err
+		}
+		ds = append(ds, d)
+	}
+	return wrongContentStreak(ds), rows.Err()
+}
+
+func wrongContentStreak(newestFirst []string) int {
+	n := 0
+	for _, d := range newestFirst {
+		switch d {
+		case "rejected_wrong_content", "kept_for_review":
+			n++
+		case "error", "timeout", "cancelled", "skipped":
+		default:
+			return n
+		}
+	}
+	return n
+}

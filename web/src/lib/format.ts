@@ -89,6 +89,7 @@ export function decisionInfo(d: string): DecisionInfo {
     case 'already_in_sync': return { label: 'In sync', icon: '✓', cls: 'mut' }
     case 'left_unchanged': return { label: 'Gave up', icon: '⚠', cls: 'warn' }
     case 'rejected_wrong_content': return { label: 'Wrong content', icon: '✕', cls: 'crit' }
+    case 'kept_for_review': return { label: 'Check content', icon: '?', cls: 'warn' }
     case 'rejected_machine_translation': return { label: 'Machine translation', icon: '✕', cls: 'crit' }
     case 'error': return { label: 'Error', icon: '✕', cls: 'crit' }
     case 'timeout': return { label: 'Timed out', icon: '✕', cls: 'crit' }

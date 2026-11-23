@@ -55,7 +55,7 @@ Two layers:
 
 **Sync → Quality gates**
 
-- *Reject wrong content*: cues must cover the detected speech (floor 45%, or 60% of what the video's own trusted track achieves).
+- *Reject wrong content*: cues must lock onto the detected speech (rejected only below 45% coverage with no lock, or under 60% of what the video's own trusted track achieves). After two rejected downloads in a row for the same file, the next one is kept for review instead.
 - *Machine translation* languages: fresh downloads only.
 - *On rejection*: `blacklist` (copy kept, file removed, Bazarr blacklists the upload and searches again), `quarantine` (copy kept, file removed), `keep` (only flagged).
 - *Cyrillic → Latin* languages.

@@ -57,5 +57,61 @@ class TestSegments(unittest.TestCase):
         self.assertTrue(all(len(s) >= ps.MIN_CUES_PER_SEG for s in segs[:-1]))
 
 
+try:
+    import numpy as np
+except ImportError:      # the engine image has it; a bare host may not
+    np = None
+
+
+@unittest.skipUnless(np is not None, "numpy not installed")
+class TestContentGate(unittest.TestCase):
+    """The gate must reject subtitles that do not lock onto the speech, and
+    must NOT reject a correct subtitle just because the detector heard little
+    of the dialogue (loud score, no embedded text track: the reported loop)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        rng = np.random.default_rng(7)
+        # 20 minutes of dialogue lines, 1.5-3.5 s long, 3-9 s apart
+        self.lines, t = [], 5.0
+        while t < 1190:
+            d = rng.uniform(1.5, 3.5)
+            self.lines.append((t, t + d, "line"))
+            t += d + rng.uniform(3, 9)
+        speech = np.zeros(120000, dtype=bool)
+        for s, e, _ in self.lines:          # the detector hears only 40% of each line
+            speech[int(s * 100):int((s + (e - s) * 0.4) * 100)] = True
+        self.npz = os.path.join(self.tmp.name, "v.npz")
+        np.savez(self.npz, speech=speech)
+        # another episode: same rhythm, unrelated times
+        self.other, t = [], 7.0
+        while t < 1190:
+            d = rng.uniform(1.5, 3.5)
+            self.other.append((t, t + d, "line"))
+            t += d + rng.uniform(3, 9)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_correct_subtitle_on_loud_video_passes(self):
+        r = {}
+        self.assertIsNone(ps.content_fit_verdict(self.npz, self.lines, r))
+        self.assertLess(r["content_fit"], ps.FIT_FLOOR)       # the old floor would have rejected it
+        self.assertGreater(r["content_sharpness"], ps.FIT_SHARP_MIN)
+
+    def test_other_episode_is_rejected(self):
+        r = {}
+        self.assertIsNotNone(ps.content_fit_verdict(self.npz, self.other, r))
+        self.assertLess(r["content_lift"], ps.FIT_LIFT_MIN)
+
+    def test_healthy_ref_judges_by_ratio_not_floor(self):
+        r = {"ref_fit": 0.52}   # Verity: 0.44 against a 0.52 track
+        self.assertIsNone(ps.content_fit_verdict(self.npz, self.lines, r))
+
+    def test_ratio_still_rejects(self):
+        r = {"ref_fit": 0.95}
+        self.assertIn("embedded track", ps.content_fit_verdict(self.npz, self.lines, r))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -97,18 +97,29 @@ POLISH_MIN_RUN = 3             # consecutive cues that must agree before applyin
 # whether the TEXT belongs to this video at all. A subtitle for the wrong
 # episode sails through every offset check (alass reported max_shift 0.31s on
 # an S04E01 subtitle mislabeled as S04E02), so after alignment the final cues
-# must actually sit on the detected speech. Absolute floor: wrong-episode
-# content measured 0.39 while the worst legitimate subtitle in a 30-file
-# library sample measured 0.51. Relative check: noisy audio drags a correct
-# subtitle and the video's own embedded track down TOGETHER (ratios 0.9-1.0
-# measured, even where both fits were 0.51-0.53), while wrong content drags
-# only the subtitle (ratio 0.39) — so the ratio separates far better than the
-# floor wherever a trusted embedded track exists.
+# are checked against the detected speech.
+#
+# Coverage ALONE does not separate right from wrong. Measured 2026-11-23 on
+# 1412 library subtitles vs 433 neighbouring-episode subtitles laid on the
+# wrong video: median coverage 0.61 vs 0.49, and the old 45% floor caught
+# only 36% of the wrong ones while rejecting correct subtitles on loud,
+# music-heavy videos with no embedded text track (Interstellar, His Dark
+# Materials, Walking Dead - downloaded, rejected and blacklisted 100+ times).
+# What does separate them is LOCK: a subtitle that belongs to the video sits
+# on the speech pattern, so shifting it a few seconds costs coverage
+# (sharpness: median 0.077 right, 0.015 wrong) and it beats the same cues laid
+# minutes away (lift: median 1.23x right, 1.04x wrong). The gate therefore
+# rejects only when the fit is low AND there is no lock - 0 of the 1412
+# library files would be rejected. Where a trusted embedded track exists the
+# ratio check stays: noisy audio drags a correct subtitle and the video's own
+# track down TOGETHER (ratios 0.9-1.0), wrong content drags only the subtitle.
 FIT_REACH = 0.6                # the file is already aligned; allow lead + slop only
 FIT_STEP = 0.2
-FIT_FLOOR = 0.45               # below this = wrong content (unless the video's own
-                               # trusted track ALSO scores under FIT_MIN_REF - then
-                               # the VAD is the problem and only FIT_RATIO applies)
+FIT_FLOOR = 0.45               # below this the fit is suspicious ...
+FIT_SHARP_MIN = 0.025          # ... and wrong if it also has no lock: peak minus
+FIT_SHARP_AT = (-8, -5, -3, 3, 5, 8)   # the median coverage this far off it
+FIT_LIFT_MIN = 1.10            # ... and it barely beats chance (the same cues
+FIT_CHANCE_AT = (-300, -120, 120, 300)  # laid minutes away)
 FIT_RATIO = 0.60               # must reach this fraction of the embedded track's fit
 FIT_MIN_REF = 0.50             # a ref below this marks the speech map unreliable
 
@@ -1069,25 +1080,65 @@ def align(video, subtitle, workdir, result):
     return out_cues, None
 
 
+def content_lock(npz, cues):
+    """(fit, sharpness, lift) of already-aligned cues against the speech map.
+
+    fit: best coverage within FIT_REACH. sharpness: fit minus the median
+    coverage a few seconds either side - cues that belong to this video lose
+    coverage when nudged off the dialogue; another episode's cues sit on a
+    flat landscape. lift: fit over the coverage the same cues reach minutes
+    away, i.e. over chance for this speech map."""
+    try:
+        import numpy as np
+        speech = np.load(npz, allow_pickle=True)["speech"].astype(float)
+    except Exception:
+        return 0.0, None, None
+    csum = np.concatenate(([0.0], np.cumsum(speech)))
+    total = len(speech)
+
+    def cov(d):
+        hit = span = 0.0
+        for s, e, _ in cues:
+            a, b = max(int((s + d) * 100.0), 0), min(int((e + d) * 100.0), total)
+            if b > a:
+                hit += csum[b] - csum[a]
+                span += b - a
+        return hit / span if span else 0.0
+
+    steps = int(round(FIT_REACH / FIT_STEP))
+    fit, peak = max((cov(i * FIT_STEP), i * FIT_STEP) for i in range(-steps, steps + 1))
+    side = sorted(cov(peak + d) for d in FIT_SHARP_AT)
+    chance = sorted(cov(peak + d) for d in FIT_CHANCE_AT)
+    med = lambda xs: (xs[len(xs) // 2 - 1] + xs[len(xs) // 2]) / 2
+    return fit, fit - med(side), fit / max(med(chance), 1e-3)
+
+
 def content_fit_verdict(npz, out_cues, result):
     """None if the cues plausibly belong to this video, else a reason."""
-    fit = round(peak_coverage(npz, out_cues, reach=FIT_REACH, step=FIT_STEP), 3)
+    fit, sharp, lift = content_lock(npz, out_cues)
+    fit = round(fit, 3)
     result["content_fit"] = fit
+    if sharp is not None:
+        result["content_sharpness"] = round(sharp, 3)
+        result["content_lift"] = round(lift, 3)
     ref_fit = result.get("ref_fit")
     # ref_fit comes from an embedded track that already PROVED it matches this
     # audio, so a low ref_fit means the speech detection is unreliable for this
     # video (score/action drowning the dialogue - The Dark Knight measured 17%
-    # on its own track). There the absolute floor rejects correct subtitles;
-    # judge only against what the video's own track manages.
-    ref_healthy = ref_fit is None or ref_fit >= FIT_MIN_REF
-    wrong = ((fit < FIT_FLOOR and ref_healthy)
-             or (ref_fit is not None and fit < FIT_RATIO * ref_fit))
-    if not wrong:
-        return None
-    return (f"cues cover only {fit:.0%} of the detected speech"
-            + (f" (this video's embedded track covers {ref_fit:.0%})"
-               if ref_fit is not None else "")
-            + " - the text belongs to a different episode/movie")
+    # on its own track). There no audio measure can judge the subtitle; only
+    # the comparison with what the video's own track manages is fair.
+    if ref_fit is not None and fit < FIT_RATIO * ref_fit:
+        return (f"cues cover only {fit:.0%} of the detected speech"
+                f" (this video's embedded track covers {ref_fit:.0%})"
+                " - the text belongs to a different episode/movie")
+    speech_map_ok = ref_fit is None or ref_fit >= FIT_MIN_REF
+    if (speech_map_ok and sharp is not None and fit < FIT_FLOOR
+            and sharp < FIT_SHARP_MIN and lift < FIT_LIFT_MIN):
+        return (f"cues cover only {fit:.0%} of the detected speech and do not"
+                f" lock onto it (moving them a few seconds changes almost"
+                f" nothing; {lift:.2f}x chance) - the text belongs to a"
+                " different episode/movie")
+    return None
 
 
 def cmd_sync(args):
@@ -1145,7 +1196,13 @@ def cmd_sync(args):
         if args.content_gate and npz is not None and out_cues:
             stage("checking the text belongs to this video")
             why = content_fit_verdict(npz, out_cues, result)
-            if why:
+            if why and args.content_advisory:
+                # The server's circuit breaker: earlier downloads for this
+                # file failed the gate in a row, so the gate (not the
+                # subtitles) is the likelier culprit. Sync it and let a
+                # person decide.
+                result["content_warning"] = why
+            elif why:
                 result["decision"] = "rejected_wrong_content"
                 result["reason"] = why
                 return result
@@ -1287,6 +1344,8 @@ def main():
     s.add_argument("--mt-gate", action="store_true",
                    help="reject machine translations (fresh downloads)")
     s.add_argument("--no-content-gate", dest="content_gate", action="store_false")
+    s.add_argument("--content-advisory", action="store_true",
+                   help="record a failed content check instead of rejecting")
     s.add_argument("--pinned", action="store_true",
                    help="only normalise the script; never touch timing")
     s.add_argument("--dry-run", action="store_true")

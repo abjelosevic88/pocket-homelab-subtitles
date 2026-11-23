@@ -30,16 +30,17 @@ type Engine struct {
 
 // SyncOptions map one to one onto `pocket_sync.py sync` flags.
 type SyncOptions struct {
-	BackupPath  string
-	LeadMS      int
-	CentreRef   bool
-	Polish      bool
-	RefResidual bool
-	Latinize    bool
-	MTGate      bool
-	ContentGate bool
-	Pinned      bool
-	DryRun      bool
+	BackupPath      string
+	LeadMS          int
+	CentreRef       bool
+	Polish          bool
+	RefResidual     bool
+	Latinize        bool
+	MTGate          bool
+	ContentGate     bool
+	ContentAdvisory bool // circuit breaker: record a failed content check, do not reject
+	Pinned          bool
+	DryRun          bool
 }
 
 // Result is the engine's JSON verdict. Raw keeps everything for the history.
@@ -79,7 +80,7 @@ func (e *Engine) Sync(ctx context.Context, video, subtitle string, o SyncOptions
 		args = append(args, "--backup-path", o.BackupPath)
 	}
 	for flag, on := range map[string]bool{"--centre-ref": o.CentreRef, "--polish": o.Polish, "--ref-residual": o.RefResidual,
-		"--latinize": o.Latinize, "--mt-gate": o.MTGate, "--no-content-gate": !o.ContentGate, "--pinned": o.Pinned, "--dry-run": o.DryRun} {
+		"--latinize": o.Latinize, "--mt-gate": o.MTGate, "--no-content-gate": !o.ContentGate, "--content-advisory": o.ContentGate && o.ContentAdvisory, "--pinned": o.Pinned, "--dry-run": o.DryRun} {
 		if on {
 			args = append(args, flag)
 		}

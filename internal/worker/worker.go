@@ -28,6 +28,14 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-subtitles/internal/store"
 )
 
+// reviewAfterRejections: once this many downloads in a row for one file have
+// failed the content check, the next one is synced and kept for a person to
+// judge instead of rejected. Every candidate failing means the check is
+// misreading this video (loud score, no embedded text track) far more often
+// than every subtitle being for another episode - and blacklisting forever
+// just loops download -> reject -> blacklist.
+const reviewAfterRejections = 2
+
 // Priorities: a person asking beats a fresh download beats the nightly sweep.
 const (
 	PrioritySweep  = 0
@@ -372,6 +380,13 @@ func (w *Worker) process(ctx context.Context, job *store.Job) {
 		Latinize: store.LangIn(lang, st.LatinizeLangs), MTGate: fresh && store.LangIn(lang, st.MTGateLangs),
 		ContentGate: st.ContentGate, Pinned: sub.Pinned,
 	}
+	streak := 0
+	if st.ContentGate && !sub.Pinned {
+		if n, err := w.st.WrongContentStreak(ctx, job.Path); err == nil {
+			streak = n
+			opts.ContentAdvisory = n >= reviewAfterRejections
+		}
+	}
 	res, err := w.eng.Sync(jctx, video, job.Path, opts, func(s string) { w.setStage(job.ID, s) })
 	if err != nil {
 		w.mu.Lock()
@@ -401,6 +416,11 @@ func (w *Worker) process(ctx context.Context, job *store.Job) {
 	run.Method, run.MaxShift, run.ContentFit, run.RefFit = res.Method, res.MaxShift, res.ContentFit, res.RefFit
 	if res.Decision == "pinned" {
 		run.Reason = "pinned — timing left exactly as it is"
+	}
+	if warn, _ := details["content_warning"].(string); warn != "" && (res.Decision == "synced" || res.Decision == "already_in_sync") {
+		run.Decision = "kept_for_review"
+		run.Reason = fmt.Sprintf("kept for you to check: the last %d runs for this file failed the content check too, so the check is more likely misreading this video than every subtitle being wrong. It was synced, not rejected; play it and pin it if it is right. (%s)", streak, warn)
+		w.st.AddEvent(ctx, job.Path, "review", "content check failed "+fmt.Sprint(streak+1)+" times in a row; kept instead of rejected", nil)
 	}
 	removed := false
 	if strings.HasPrefix(res.Decision, "rejected_") {
@@ -448,7 +468,8 @@ func (w *Worker) afterRun(ctx context.Context, st store.Settings, sub *store.Sub
 	switch {
 	case store.IsAttention(run.Decision) && st.NotifyFailures:
 		title := map[string]string{"left_unchanged": "Subtitle could not be synced", "error": "Subtitle sync error", "timeout": "Subtitle sync timed out",
-			"rejected_wrong_content": "Subtitle rejected: wrong content", "rejected_machine_translation": "Subtitle rejected: machine translation"}[run.Decision]
+			"rejected_wrong_content": "Subtitle rejected: wrong content", "rejected_machine_translation": "Subtitle rejected: machine translation",
+			"kept_for_review": "Subtitle kept for review"}[run.Decision]
 		w.notify(ctx, st, title, name+"\n"+run.Reason, notify.Warning)
 	case run.Decision == "synced" && st.NotifySynced:
 		w.notify(ctx, st, "Subtitle synced", fmt.Sprintf("%s\n%s, moved up to %.2fs", name, methodLabel(run.Method), deref(run.MaxShift)), notify.Success)
